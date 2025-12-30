@@ -1,0 +1,32 @@
+{
+  "name": "delegation-agents-backend",
+  "version": "1.0.0",
+  "main": "dist/index.js",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "scheduler": "tsx src/scheduler.ts"
+  },
+  "keywords": ["metamask", "delegation", "dca", "agents"],
+  "author": "",
+  "license": "ISC",
+  "description": "Backend for MetaMask Delegation Agents",
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^17.2.3",
+    "express": "^5.2.1",
+    "mongoose": "^9.1.0",
+    "node-cron": "^4.2.1",
+    "viem": "^2.43.3"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
+    "@types/node": "^25.0.3",
+    "nodemon": "^3.1.11",
+    "ts-node": "^10.9.2",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3"
+  }
+}
