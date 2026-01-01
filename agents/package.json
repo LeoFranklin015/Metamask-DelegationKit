@@ -1,0 +1,18 @@
+{
+  "name": "dca-agent",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "start": "npx tsx src/index.ts",
+    "trigger": "npx tsx src/trigger.ts"
+  },
+  "dependencies": {
+    "viem": "^2.21.0",
+    "@metamask/smart-accounts-kit": "^0.3.0",
+    "dotenv": "^16.3.1"
+  },
+  "devDependencies": {
+    "tsx": "^4.7.0",
+    "typescript": "^5.3.3"
+  }
+}

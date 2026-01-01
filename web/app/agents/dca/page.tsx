@@ -1,14 +1,9 @@
 "use client";
 
 import { ConnectButton } from "@rainbow-me/rainbowkit";
-import { useAccount, usePublicClient, useWalletClient } from "wagmi";
+import { useAccount, useWalletClient } from "wagmi";
 import { useState, useCallback, useEffect } from "react";
 import { parseUnits, type Address, type Hex } from "viem";
-import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
-import {
-  toMetaMaskSmartAccount,
-  Implementation,
-} from "@metamask/smart-accounts-kit";
 import {
   requestExecutionPermissions,
   type RequestExecutionPermissionsParameters,
@@ -20,6 +15,9 @@ import { sepolia } from "viem/chains";
 // ============================================
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:3001";
+
+// Fixed DCA Agent address - this is the address that will execute swaps on behalf of users
+const DCA_AGENT_ADDRESS = "0x4d3b8dd169fa999a3689ef6eeea640d0468de0fe" as Address;
 
 const TOKENS = {
   USDC: {
@@ -66,12 +64,6 @@ const INTERVAL_PRESETS = [
 // Types
 // ============================================
 
-interface SessionData {
-  privateKey: Hex;
-  address: Address;
-  smartAccountAddress?: Address;
-}
-
 interface Agent {
   _id: string;
   name: string;
@@ -95,12 +87,7 @@ interface Agent {
 
 export default function DCAAgentPage() {
   const { address, isConnected } = useAccount();
-  const publicClient = usePublicClient();
   const { data: walletClient } = useWalletClient();
-
-  // Session account state
-  const [sessionData, setSessionData] = useState<SessionData | null>(null);
-  const [smartAccount, setSmartAccount] = useState<Awaited<ReturnType<typeof toMetaMaskSmartAccount>> | null>(null);
 
   // Form state
   const [agentName, setAgentName] = useState("My DCA Bot");
@@ -115,7 +102,7 @@ export default function DCAAgentPage() {
   const [delegationManager, setDelegationManager] = useState<Address | null>(null);
 
   // UI state
-  const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
+  const [step, setStep] = useState<1 | 2 | 3>(1);
   const [isLoading, setIsLoading] = useState(false);
   const [logs, setLogs] = useState<string[]>([]);
   const [agents, setAgents] = useState<Agent[]>([]);
@@ -127,72 +114,18 @@ export default function DCAAgentPage() {
   }, []);
 
   // ============================================
-  // Step 1: Generate Session Account
-  // ============================================
-
-  const generateSessionAccount = useCallback(async () => {
-    if (!publicClient) return;
-
-    setIsLoading(true);
-    addLog("Generating session account...");
-
-    try {
-      // Check localStorage for existing session
-      const stored = localStorage.getItem("dcaSessionAccount");
-      let privateKey: Hex;
-
-      if (stored) {
-        const parsed = JSON.parse(stored) as SessionData;
-        privateKey = parsed.privateKey;
-        addLog("Loaded existing session from storage");
-      } else {
-        privateKey = generatePrivateKey();
-        addLog("Generated new session key");
-      }
-
-      const account = privateKeyToAccount(privateKey);
-
-      // Create MetaMask Smart Account
-      const metaMaskSmartAccount = await toMetaMaskSmartAccount({
-        client: publicClient,
-        implementation: Implementation.Hybrid,
-        deployParams: [account.address, [], [], []],
-        deploySalt: "0x",
-        signer: { account },
-      });
-
-      const data: SessionData = {
-        privateKey,
-        address: account.address,
-        smartAccountAddress: metaMaskSmartAccount.address,
-      };
-
-      localStorage.setItem("dcaSessionAccount", JSON.stringify(data));
-      setSessionData(data);
-      setSmartAccount(metaMaskSmartAccount);
-
-      addLog(`Session EOA: ${account.address}`);
-      addLog(`Smart Account: ${metaMaskSmartAccount.address}`);
-      setStep(2);
-    } catch (error) {
-      addLog(`Error: ${error instanceof Error ? error.message : String(error)}`);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [publicClient, addLog]);
-
-  // ============================================
-  // Step 2: Request Permissions
+  // Step 1: Configure & Grant Permission
   // ============================================
 
   const requestPermissions = useCallback(async () => {
-    if (!walletClient || !smartAccount || !sessionData) {
-      addLog("Missing required data for permission request");
+    if (!walletClient) {
+      addLog("Wallet not connected");
       return;
     }
 
     setIsLoading(true);
     addLog("Requesting ERC-20 periodic permission...");
+    addLog(`Delegating to DCA Agent: ${DCA_AGENT_ADDRESS}`);
 
     try {
       const tokenData = TOKENS[tokenIn];
@@ -209,7 +142,12 @@ export default function DCAAgentPage() {
         {
           chainId: sepolia.id,
           expiry,
-          signer: smartAccount.address,
+          signer: {
+            type: "account",
+            data: {
+              address: DCA_AGENT_ADDRESS,
+            },
+          },
           permission: {
             type: "erc20-token-periodic",
             data: {
@@ -237,7 +175,7 @@ export default function DCAAgentPage() {
 
       addLog("✅ Permission granted!");
       addLog(`Context: ${granted[0].context.slice(0, 30)}...`);
-      setStep(3);
+      setStep(2);
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
       addLog(`❌ Permission error: ${msg}`);
@@ -248,14 +186,14 @@ export default function DCAAgentPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [walletClient, smartAccount, sessionData, tokenIn, amount, intervalSeconds, addLog]);
+  }, [walletClient, tokenIn, amount, intervalSeconds, addLog]);
 
   // ============================================
-  // Step 3: Create Agent in Backend
+  // Step 2: Create Agent in Backend
   // ============================================
 
   const createAgent = useCallback(async () => {
-    if (!permissionContext || !delegationManager || !sessionData || !address) {
+    if (!permissionContext || !delegationManager || !address) {
       addLog("Missing permission data");
       return;
     }
@@ -272,7 +210,7 @@ export default function DCAAgentPage() {
         name: agentName,
         permissionContext,
         delegationManager,
-        sessionKeyAddress: sessionData.smartAccountAddress,
+        sessionKeyAddress: DCA_AGENT_ADDRESS,
         config: {
           tokenIn: tokenInData.address,
           tokenOut: tokenOutData.address,
@@ -302,7 +240,7 @@ export default function DCAAgentPage() {
       addLog(`Next execution: ${new Date(data.agent.nextExecution).toLocaleString()}`);
 
       setCreatedAgentId(data.agent.id);
-      setStep(4);
+      setStep(3);
       fetchAgents();
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
@@ -313,7 +251,6 @@ export default function DCAAgentPage() {
   }, [
     permissionContext,
     delegationManager,
-    sessionData,
     address,
     agentName,
     tokenIn,
@@ -389,6 +326,18 @@ export default function DCAAgentPage() {
     }
   };
 
+  // Reset to create new agent
+  const resetForm = () => {
+    setStep(1);
+    setPermissionContext(null);
+    setDelegationManager(null);
+    setCreatedAgentId(null);
+    setAgentName("My DCA Bot");
+    setAmount("10");
+    setIntervalSeconds(86400);
+    setMaxExecutions("");
+  };
+
   // ============================================
   // Effects
   // ============================================
@@ -421,18 +370,20 @@ export default function DCAAgentPage() {
         <div className="bg-blue-500/10 border border-blue-500/30 rounded-xl p-4 mb-6">
           <h3 className="font-semibold text-blue-400 mb-2">How it works</h3>
           <ol className="text-sm text-blue-200 space-y-1 list-decimal list-inside">
-            <li>Generate a session key that will execute trades on your behalf</li>
-            <li>Grant permission for periodic token spending via MetaMask</li>
-            <li>Configure your DCA strategy (amount, frequency, tokens)</li>
+            <li>Configure your DCA strategy (tokens, amount, interval)</li>
+            <li>Grant permission to the DCA agent via MetaMask</li>
             <li>Agent automatically executes swaps on schedule</li>
           </ol>
+          <p className="text-xs text-blue-300 mt-2">
+            DCA Agent Address: <code className="bg-blue-900/50 px-1 rounded">{DCA_AGENT_ADDRESS}</code>
+          </p>
         </div>
 
         {isConnected ? (
           <div className="grid md:grid-cols-2 gap-6">
             {/* Left Column - Setup */}
             <div className="space-y-6">
-              {/* Step 1: Session Account */}
+              {/* Step 1: Configure & Grant Permission */}
               <div
                 className={`bg-gray-800/80 rounded-xl p-6 border ${
                   step === 1 ? "border-blue-500" : "border-gray-700/50"
@@ -441,61 +392,10 @@ export default function DCAAgentPage() {
                 <div className="flex items-center gap-3 mb-4">
                   <div
                     className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${
-                      step > 1
-                        ? "bg-green-500"
-                        : step === 1
-                        ? "bg-blue-500"
-                        : "bg-gray-600"
+                      step > 1 ? "bg-green-500" : step === 1 ? "bg-blue-500" : "bg-gray-600"
                     }`}
                   >
                     {step > 1 ? "✓" : "1"}
-                  </div>
-                  <h2 className="text-lg font-semibold">Session Account</h2>
-                </div>
-
-                {sessionData ? (
-                  <div className="text-sm space-y-2">
-                    <p className="text-gray-400">
-                      EOA:{" "}
-                      <span className="text-gray-300 font-mono">
-                        {sessionData.address.slice(0, 10)}...
-                      </span>
-                    </p>
-                    <p className="text-gray-400">
-                      Smart Account:{" "}
-                      <span className="text-gray-300 font-mono">
-                        {sessionData.smartAccountAddress?.slice(0, 10)}...
-                      </span>
-                    </p>
-                  </div>
-                ) : (
-                  <button
-                    onClick={generateSessionAccount}
-                    disabled={isLoading}
-                    className="w-full py-2 bg-blue-500 hover:bg-blue-400 disabled:bg-gray-600 rounded-lg font-medium transition-colors"
-                  >
-                    {isLoading ? "Generating..." : "Generate Session Account"}
-                  </button>
-                )}
-              </div>
-
-              {/* Step 2: Configuration */}
-              <div
-                className={`bg-gray-800/80 rounded-xl p-6 border ${
-                  step === 2 ? "border-blue-500" : "border-gray-700/50"
-                }`}
-              >
-                <div className="flex items-center gap-3 mb-4">
-                  <div
-                    className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${
-                      step > 2
-                        ? "bg-green-500"
-                        : step === 2
-                        ? "bg-blue-500"
-                        : "bg-gray-600"
-                    }`}
-                  >
-                    {step > 2 ? "✓" : "2"}
                   </div>
                   <h2 className="text-lg font-semibold">Configure & Grant Permission</h2>
                 </div>
@@ -511,7 +411,7 @@ export default function DCAAgentPage() {
                       value={agentName}
                       onChange={(e) => setAgentName(e.target.value)}
                       className="w-full px-3 py-2 bg-gray-700 rounded-lg border border-gray-600 focus:border-blue-500 outline-none"
-                      disabled={step !== 2}
+                      disabled={step !== 1}
                     />
                   </div>
 
@@ -525,7 +425,7 @@ export default function DCAAgentPage() {
                         value={tokenIn}
                         onChange={(e) => setTokenIn(e.target.value as TokenSymbol)}
                         className="w-full px-3 py-2 bg-gray-700 rounded-lg border border-gray-600"
-                        disabled={step !== 2}
+                        disabled={step !== 1}
                       >
                         {Object.entries(TOKENS).map(([symbol, token]) => (
                           <option key={symbol} value={symbol}>
@@ -542,7 +442,7 @@ export default function DCAAgentPage() {
                         value={tokenOut}
                         onChange={(e) => setTokenOut(e.target.value as TokenSymbol)}
                         className="w-full px-3 py-2 bg-gray-700 rounded-lg border border-gray-600"
-                        disabled={step !== 2}
+                        disabled={step !== 1}
                       >
                         {Object.entries(TOKENS)
                           .filter(([s]) => s !== tokenIn)
@@ -566,7 +466,7 @@ export default function DCAAgentPage() {
                         value={amount}
                         onChange={(e) => setAmount(e.target.value)}
                         className="flex-1 px-3 py-2 bg-gray-700 rounded-lg border border-gray-600 focus:border-blue-500 outline-none"
-                        disabled={step !== 2}
+                        disabled={step !== 1}
                       />
                       <span className="px-3 py-2 bg-gray-600 rounded-lg">
                         {TOKENS[tokenIn].symbol}
@@ -584,7 +484,7 @@ export default function DCAAgentPage() {
                         <button
                           key={preset.value}
                           onClick={() => setIntervalSeconds(preset.value)}
-                          disabled={step !== 2}
+                          disabled={step !== 1}
                           className={`px-3 py-2 rounded-lg text-sm transition-colors ${
                             intervalSeconds === preset.value
                               ? "bg-blue-500 text-white"
@@ -601,7 +501,7 @@ export default function DCAAgentPage() {
                       onChange={(e) => setIntervalSeconds(parseInt(e.target.value) || 60)}
                       className="w-full px-3 py-2 bg-gray-700 rounded-lg border border-gray-600 focus:border-blue-500 outline-none text-sm"
                       placeholder="Custom interval in seconds"
-                      disabled={step !== 2}
+                      disabled={step !== 1}
                       min={60}
                     />
                   </div>
@@ -617,39 +517,35 @@ export default function DCAAgentPage() {
                       onChange={(e) => setMaxExecutions(e.target.value)}
                       placeholder="Leave empty for unlimited"
                       className="w-full px-3 py-2 bg-gray-700 rounded-lg border border-gray-600 focus:border-blue-500 outline-none"
-                      disabled={step !== 2}
+                      disabled={step !== 1}
                     />
                   </div>
 
-                  {step === 2 && (
+                  {step === 1 && (
                     <button
                       onClick={requestPermissions}
-                      disabled={isLoading || !smartAccount}
+                      disabled={isLoading}
                       className="w-full py-3 bg-purple-500 hover:bg-purple-400 disabled:bg-gray-600 rounded-lg font-medium transition-colors"
                     >
-                      {isLoading ? "Requesting..." : "Grant Permission"}
+                      {isLoading ? "Requesting..." : "Grant Permission to DCA Agent"}
                     </button>
                   )}
                 </div>
               </div>
 
-              {/* Step 3: Create Agent */}
+              {/* Step 2: Create Agent */}
               <div
                 className={`bg-gray-800/80 rounded-xl p-6 border ${
-                  step === 3 ? "border-blue-500" : "border-gray-700/50"
+                  step === 2 ? "border-blue-500" : "border-gray-700/50"
                 }`}
               >
                 <div className="flex items-center gap-3 mb-4">
                   <div
                     className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${
-                      step > 3
-                        ? "bg-green-500"
-                        : step === 3
-                        ? "bg-blue-500"
-                        : "bg-gray-600"
+                      step > 2 ? "bg-green-500" : step === 2 ? "bg-blue-500" : "bg-gray-600"
                     }`}
                   >
-                    {step > 3 ? "✓" : "3"}
+                    {step > 2 ? "✓" : "2"}
                   </div>
                   <h2 className="text-lg font-semibold">Create Agent</h2>
                 </div>
@@ -663,7 +559,7 @@ export default function DCAAgentPage() {
                   </div>
                 )}
 
-                {step === 3 && (
+                {step === 2 && (
                   <button
                     onClick={createAgent}
                     disabled={isLoading}
@@ -673,14 +569,22 @@ export default function DCAAgentPage() {
                   </button>
                 )}
 
-                {step === 4 && (
-                  <div className="p-3 bg-green-500/10 border border-green-500/30 rounded-lg">
-                    <p className="text-green-400 font-medium">
-                      🎉 Agent Created Successfully!
-                    </p>
-                    <p className="text-green-300 text-sm mt-1">
-                      ID: {createdAgentId}
-                    </p>
+                {step === 3 && (
+                  <div className="space-y-3">
+                    <div className="p-3 bg-green-500/10 border border-green-500/30 rounded-lg">
+                      <p className="text-green-400 font-medium">
+                        🎉 Agent Created Successfully!
+                      </p>
+                      <p className="text-green-300 text-sm mt-1">
+                        ID: {createdAgentId}
+                      </p>
+                    </div>
+                    <button
+                      onClick={resetForm}
+                      className="w-full py-2 bg-blue-500 hover:bg-blue-400 rounded-lg font-medium transition-colors"
+                    >
+                      Create Another Agent
+                    </button>
                   </div>
                 )}
               </div>

@@ -2,7 +2,6 @@ import "dotenv/config";
 import express from "express";
 import cors from "cors";
 import { connectDatabase } from "./config/database.js";
-import { getUpcomingExecutions, getExecutionStats } from "./services/scheduler.js";
 import agentsRouter from "./routes/agents.js";
 
 // ============================================
@@ -37,25 +36,6 @@ app.get("/health", (req, res) => {
 // Agents API
 app.use("/api/agents", agentsRouter);
 
-// Scheduler endpoints
-app.get("/api/scheduler/upcoming", async (req, res) => {
-  try {
-    const limit = parseInt(req.query.limit as string) || 10;
-    const upcoming = await getUpcomingExecutions(limit);
-    res.json({ success: true, upcoming });
-  } catch (error) {
-    res.status(500).json({ success: false, error: "Failed to fetch upcoming executions" });
-  }
-});
-
-app.get("/api/stats", async (req, res) => {
-  try {
-    const stats = await getExecutionStats();
-    res.json({ success: true, stats });
-  } catch (error) {
-    res.status(500).json({ success: false, error: "Failed to fetch stats" });
-  }
-});
 
 // ============================================
 // Start Server
@@ -73,7 +53,7 @@ async function main() {
       console.log(`   API: http://localhost:${PORT}/api/agents`);
     });
 
-    console.log("\n📋 Available Endpoints:");
+    console.log("\n📋 Available Endpoints (Indexer Only):");
     console.log("   GET  /health              - Health check");
     console.log("   GET  /api/agents          - List agents");
     console.log("   GET  /api/agents/:id      - Get agent details");
@@ -81,11 +61,8 @@ async function main() {
     console.log("   PATCH /api/agents/:id     - Update agent");
     console.log("   DELETE /api/agents/:id    - Cancel agent");
     console.log("   GET  /api/agents/:id/logs - Get execution logs");
-    console.log("   POST /api/agents/:id/execute - Manual execution");
-    console.log("   POST /api/agents/trigger  - Trigger all due agents");
-    console.log("   GET  /api/agents/due      - Get due agents");
-    console.log("   GET  /api/scheduler/upcoming - Upcoming executions");
-    console.log("   GET  /api/stats           - Execution statistics\n");
+    console.log("   POST /api/agents/:id/log  - Add execution log (from agent)");
+    console.log("   GET  /api/agents/due      - Get due agents\n");
   } catch (error) {
     console.error("❌ Failed to start server:", error);
     process.exit(1);
