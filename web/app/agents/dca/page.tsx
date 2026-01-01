@@ -19,13 +19,14 @@ const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:300
 // Fixed DCA Agent address - this is the address that will execute swaps on behalf of users
 const DCA_AGENT_ADDRESS = "0x4d3b8dd169fa999a3689ef6eeea640d0468de0fe" as Address;
 
+// All available tokens (matching uniswap page)
 const TOKENS = {
-  USDC: {
-    symbol: "USDC",
-    name: "USD Coin",
-    address: "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238" as Address,
-    decimals: 6,
-    logo: "💵",
+  ETH: {
+    symbol: "ETH",
+    name: "Ethereum",
+    address: null as Address | null,
+    decimals: 18,
+    logo: "⟠",
   },
   WETH: {
     symbol: "WETH",
@@ -33,6 +34,13 @@ const TOKENS = {
     address: "0xfFf9976782d46CC05630D1f6eBAb18b2324d6B14" as Address,
     decimals: 18,
     logo: "⟠",
+  },
+  USDC: {
+    symbol: "USDC",
+    name: "USD Coin",
+    address: "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238" as Address,
+    decimals: 6,
+    logo: "💵",
   },
   UNI: {
     symbol: "UNI",
@@ -43,14 +51,113 @@ const TOKENS = {
   },
   DAI: {
     symbol: "DAI",
-    name: "Dai",
+    name: "Dai Stablecoin",
     address: "0xFF34B3d4Aee8ddCd6F9AFFFB6Fe49bD371b8a357" as Address,
     decimals: 18,
     logo: "◈",
   },
+  LINK: {
+    symbol: "LINK",
+    name: "Chainlink",
+    address: "0xf8Fb3713D459D7C1018BD0A49D19b4C44290EBE5" as Address,
+    decimals: 18,
+    logo: "⬡",
+  },
 } as const;
 
 type TokenSymbol = keyof typeof TOKENS;
+
+// All pools with liquidity on Sepolia (from uniswap page scan)
+// Format: "tokenA-tokenB-fee" -> { fee, liquidity }
+const POOLS_WITH_LIQUIDITY: Array<{ tokenA: TokenSymbol; tokenB: TokenSymbol; fee: number; liquidity: string }> = [
+  // ETH/WETH pairs (ETH uses WETH pool)
+  { tokenA: "WETH", tokenB: "USDC", fee: 500, liquidity: "1145834379..." },
+  { tokenA: "WETH", tokenB: "USDC", fee: 3000, liquidity: "~$7.3K" },
+  { tokenA: "WETH", tokenB: "USDC", fee: 10000, liquidity: "~$31K" },
+  { tokenA: "WETH", tokenB: "UNI", fee: 500, liquidity: "2291036007..." },
+  { tokenA: "WETH", tokenB: "UNI", fee: 3000, liquidity: "~$7.7M" },
+  { tokenA: "WETH", tokenB: "UNI", fee: 10000, liquidity: "9365492206..." },
+  { tokenA: "WETH", tokenB: "DAI", fee: 500, liquidity: "1465267620..." },
+  { tokenA: "WETH", tokenB: "DAI", fee: 3000, liquidity: "~$6.8K" },
+  { tokenA: "WETH", tokenB: "DAI", fee: 10000, liquidity: "2333363134..." },
+  { tokenA: "WETH", tokenB: "LINK", fee: 500, liquidity: "1581060649..." },
+  { tokenA: "WETH", tokenB: "LINK", fee: 3000, liquidity: "1037313167..." },
+  // USDC pairs
+  { tokenA: "USDC", tokenB: "UNI", fee: 500, liquidity: "7158291702..." },
+  { tokenA: "USDC", tokenB: "UNI", fee: 3000, liquidity: "~$7.7M" },
+  { tokenA: "USDC", tokenB: "UNI", fee: 10000, liquidity: "~$31K" },
+  // UNI pairs
+  { tokenA: "UNI", tokenB: "DAI", fee: 3000, liquidity: "~$6.8K" },
+  { tokenA: "UNI", tokenB: "LINK", fee: 3000, liquidity: "~$7.7M" },
+  // DAI pairs
+  { tokenA: "DAI", tokenB: "LINK", fee: 500, liquidity: "4092621011..." },
+  { tokenA: "DAI", tokenB: "LINK", fee: 3000, liquidity: "~$6.8K" },
+];
+
+// Helper: Check if a pool exists with liquidity for given pair and fee
+function hasPoolWithLiquidity(tokenIn: TokenSymbol, tokenOut: TokenSymbol, fee: number): { exists: boolean; liquidity?: string } {
+  const pool = POOLS_WITH_LIQUIDITY.find(p =>
+    ((p.tokenA === tokenIn && p.tokenB === tokenOut) || (p.tokenA === tokenOut && p.tokenB === tokenIn)) && p.fee === fee
+  );
+
+  return pool ? { exists: true, liquidity: pool.liquidity } : { exists: false };
+}
+
+// Helper: Get all tokens that have at least one pool with liquidity when paired with another token
+function getTokensWithPools(): TokenSymbol[] {
+  const tokensInPools = new Set<TokenSymbol>();
+
+  POOLS_WITH_LIQUIDITY.forEach(pool => {
+    tokensInPools.add(pool.tokenA);
+    tokensInPools.add(pool.tokenB);
+  });
+
+  // Exclude native ETH - only ERC20 tokens work with delegation
+  tokensInPools.delete("ETH");
+
+  return Array.from(tokensInPools);
+}
+
+// Helper: Get valid output tokens for a given input token (tokens that have pools with liquidity)
+function getValidOutputTokens(tokenIn: TokenSymbol): TokenSymbol[] {
+  const validTokens = new Set<TokenSymbol>();
+
+  POOLS_WITH_LIQUIDITY.forEach(pool => {
+    if (pool.tokenA === tokenIn) {
+      validTokens.add(pool.tokenB);
+    } else if (pool.tokenB === tokenIn) {
+      validTokens.add(pool.tokenA);
+    }
+  });
+
+  // Remove the input token itself and ETH (not usable)
+  validTokens.delete(tokenIn);
+  validTokens.delete("ETH");
+
+  return Array.from(validTokens);
+}
+
+// Helper: Get valid fee tiers for a given pair
+function getValidFeeTiers(tokenIn: TokenSymbol, tokenOut: TokenSymbol): number[] {
+  const validFees: number[] = [];
+
+  POOLS_WITH_LIQUIDITY.forEach(pool => {
+    if ((pool.tokenA === tokenIn && pool.tokenB === tokenOut) || (pool.tokenA === tokenOut && pool.tokenB === tokenIn)) {
+      if (!validFees.includes(pool.fee)) {
+        validFees.push(pool.fee);
+      }
+    }
+  });
+
+  return validFees.sort((a, b) => a - b);
+}
+
+// Fee tier labels
+const FEE_TIER_LABELS: Record<number, string> = {
+  500: "0.05%",
+  3000: "0.3%",
+  10000: "1%",
+};
 
 // Interval presets (in seconds)
 const INTERVAL_PRESETS = [
@@ -93,16 +200,16 @@ export default function DCAAgentPage() {
   const [agentName, setAgentName] = useState("My DCA Bot");
   const [tokenIn, setTokenIn] = useState<TokenSymbol>("USDC");
   const [tokenOut, setTokenOut] = useState<TokenSymbol>("WETH");
-  const [amount, setAmount] = useState("10");
-  const [intervalSeconds, setIntervalSeconds] = useState(86400); // Default 1 day
+  const [amount, setAmount] = useState("1");
+  const [intervalSeconds, setIntervalSeconds] = useState(86400);
   const [maxExecutions, setMaxExecutions] = useState("");
+  const [feeTier, setFeeTier] = useState(3000);
 
-  // Permission state
-  const [permissionContext, setPermissionContext] = useState<Hex | null>(null);
-  const [delegationManager, setDelegationManager] = useState<Address | null>(null);
+  // Pool status
+  const [poolStatus, setPoolStatus] = useState<"checking" | "active" | "no-pool" | "no-liquidity" | null>(null);
+  const [poolLiquidity, setPoolLiquidity] = useState<string | null>(null);
 
   // UI state
-  const [step, setStep] = useState<1 | 2 | 3>(1);
   const [isLoading, setIsLoading] = useState(false);
   const [logs, setLogs] = useState<string[]>([]);
   const [agents, setAgents] = useState<Agent[]>([]);
@@ -114,12 +221,51 @@ export default function DCAAgentPage() {
   }, []);
 
   // ============================================
-  // Step 1: Configure & Grant Permission
+  // Get valid output tokens and fee tiers based on selection
   // ============================================
 
-  const requestPermissions = useCallback(async () => {
-    if (!walletClient) {
+  const validOutputTokens = getValidOutputTokens(tokenIn);
+  const validFeeTiers = getValidFeeTiers(tokenIn, tokenOut);
+
+  // Auto-select first valid output token if current is invalid
+  useEffect(() => {
+    if (!validOutputTokens.includes(tokenOut) && validOutputTokens.length > 0) {
+      setTokenOut(validOutputTokens[0]);
+    }
+  }, [tokenIn, validOutputTokens, tokenOut]);
+
+  // Auto-select first valid fee tier if current is invalid
+  useEffect(() => {
+    if (!validFeeTiers.includes(feeTier) && validFeeTiers.length > 0) {
+      setFeeTier(validFeeTiers[0]);
+    }
+  }, [tokenIn, tokenOut, validFeeTiers, feeTier]);
+
+  // Check pool status using static list
+  useEffect(() => {
+    const poolCheck = hasPoolWithLiquidity(tokenIn, tokenOut, feeTier);
+    if (poolCheck.exists) {
+      setPoolStatus("active");
+      setPoolLiquidity(poolCheck.liquidity || null);
+    } else {
+      setPoolStatus("no-pool");
+      setPoolLiquidity(null);
+    }
+  }, [tokenIn, tokenOut, feeTier]);
+
+  // ============================================
+  // Request Permission & Create Agent
+  // ============================================
+
+  const requestPermissionsAndCreateAgent = useCallback(async () => {
+    if (!walletClient || !address) {
       addLog("Wallet not connected");
+      return;
+    }
+
+    const tokenInData = TOKENS[tokenIn];
+    if (!tokenInData.address) {
+      addLog("Invalid token selected");
       return;
     }
 
@@ -128,14 +274,13 @@ export default function DCAAgentPage() {
     addLog(`Delegating to DCA Agent: ${DCA_AGENT_ADDRESS}`);
 
     try {
-      const tokenData = TOKENS[tokenIn];
-      const amountInWei = parseUnits(amount, tokenData.decimals);
+      const amountInWei = parseUnits(amount, tokenInData.decimals);
 
       // Calculate expiry (30 days from now)
       const expiry = Math.floor(Date.now() / 1000) + 30 * 24 * 60 * 60;
 
-      addLog(`Token: ${tokenData.symbol} (${tokenData.address})`);
-      addLog(`Amount per period: ${amount} ${tokenData.symbol}`);
+      addLog(`Token: ${tokenInData.symbol} (${tokenInData.address})`);
+      addLog(`Amount per period: ${amount} ${tokenInData.symbol}`);
       addLog(`Interval: ${intervalSeconds} seconds`);
 
       const permissionParams: RequestExecutionPermissionsParameters = [
@@ -151,7 +296,7 @@ export default function DCAAgentPage() {
           permission: {
             type: "erc20-token-periodic",
             data: {
-              tokenAddress: tokenData.address,
+              tokenAddress: tokenInData.address,
               periodAmount: amountInWei,
               periodDuration: intervalSeconds,
             },
@@ -170,40 +315,17 @@ export default function DCAAgentPage() {
         signerMeta: { delegationManager: Address };
       }>;
 
-      setPermissionContext(granted[0].context);
-      setDelegationManager(granted[0].signerMeta.delegationManager);
+      const permissionContext = granted[0].context;
+      const delegationManager = granted[0].signerMeta.delegationManager;
 
-      addLog("✅ Permission granted!");
-      addLog(`Context: ${granted[0].context.slice(0, 30)}...`);
-      setStep(2);
-    } catch (error) {
-      const msg = error instanceof Error ? error.message : String(error);
-      addLog(`❌ Permission error: ${msg}`);
+      addLog("Permission granted!");
+      addLog(`Context: ${permissionContext.slice(0, 30)}...`);
 
-      if (msg.includes("User rejected")) {
-        addLog("User rejected the permission request");
-      }
-    } finally {
-      setIsLoading(false);
-    }
-  }, [walletClient, tokenIn, amount, intervalSeconds, addLog]);
+      // Immediately create agent in backend
+      addLog("Creating agent in backend...");
 
-  // ============================================
-  // Step 2: Create Agent in Backend
-  // ============================================
-
-  const createAgent = useCallback(async () => {
-    if (!permissionContext || !delegationManager || !address) {
-      addLog("Missing permission data");
-      return;
-    }
-
-    setIsLoading(true);
-    addLog("Creating agent in backend...");
-
-    try {
-      const tokenInData = TOKENS[tokenIn];
       const tokenOutData = TOKENS[tokenOut];
+      const tokenOutAddr = tokenOut === "ETH" ? TOKENS.WETH.address : tokenOutData.address;
 
       const payload = {
         userAddress: address,
@@ -213,16 +335,14 @@ export default function DCAAgentPage() {
         sessionKeyAddress: DCA_AGENT_ADDRESS,
         config: {
           tokenIn: tokenInData.address,
-          tokenOut: tokenOutData.address,
-          amountPerExecution: parseUnits(amount, tokenInData.decimals).toString(),
+          tokenOut: tokenOutAddr,
+          amountPerExecution: amountInWei.toString(),
           intervalSeconds,
           maxSlippage: 1.0,
-          feeTier: 3000,
+          feeTier,
         },
         maxExecutions: maxExecutions ? parseInt(maxExecutions) : undefined,
       };
-
-      addLog(`Sending to backend: ${BACKEND_URL}/api/agents/dca`);
 
       const response = await fetch(`${BACKEND_URL}/api/agents/dca`, {
         method: "POST",
@@ -236,30 +356,22 @@ export default function DCAAgentPage() {
         throw new Error(data.error || "Failed to create agent");
       }
 
-      addLog(`✅ Agent created! ID: ${data.agent.id}`);
+      addLog(`Agent created! ID: ${data.agent.id}`);
       addLog(`Next execution: ${new Date(data.agent.nextExecution).toLocaleString()}`);
 
       setCreatedAgentId(data.agent.id);
-      setStep(3);
       fetchAgents();
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
-      addLog(`❌ Error creating agent: ${msg}`);
+      addLog(`Error: ${msg}`);
+
+      if (msg.includes("User rejected")) {
+        addLog("User rejected the permission request");
+      }
     } finally {
       setIsLoading(false);
     }
-  }, [
-    permissionContext,
-    delegationManager,
-    address,
-    agentName,
-    tokenIn,
-    tokenOut,
-    amount,
-    intervalSeconds,
-    maxExecutions,
-    addLog,
-  ]);
+  }, [walletClient, address, tokenIn, tokenOut, amount, intervalSeconds, maxExecutions, agentName, feeTier, addLog]);
 
   // ============================================
   // Fetch User's Agents
@@ -326,16 +438,23 @@ export default function DCAAgentPage() {
     }
   };
 
-  // Reset to create new agent
+  // Reset form
   const resetForm = () => {
-    setStep(1);
-    setPermissionContext(null);
-    setDelegationManager(null);
     setCreatedAgentId(null);
     setAgentName("My DCA Bot");
-    setAmount("10");
+    setAmount("1");
     setIntervalSeconds(86400);
     setMaxExecutions("");
+  };
+
+  // Get token symbol from address
+  const getTokenSymbol = (addr: string) => {
+    for (const [symbol, token] of Object.entries(TOKENS)) {
+      if (token.address?.toLowerCase() === addr.toLowerCase()) {
+        return symbol;
+      }
+    }
+    return addr.slice(0, 6) + "...";
   };
 
   // ============================================
@@ -360,7 +479,7 @@ export default function DCAAgentPage() {
           <div>
             <h1 className="text-2xl font-bold">🤖 DCA Agent</h1>
             <p className="text-gray-400 text-sm">
-              Automated Dollar-Cost Averaging
+              Automated Dollar-Cost Averaging on Sepolia
             </p>
           </div>
           <ConnectButton />
@@ -371,11 +490,11 @@ export default function DCAAgentPage() {
           <h3 className="font-semibold text-blue-400 mb-2">How it works</h3>
           <ol className="text-sm text-blue-200 space-y-1 list-decimal list-inside">
             <li>Configure your DCA strategy (tokens, amount, interval)</li>
-            <li>Grant permission to the DCA agent via MetaMask</li>
-            <li>Agent automatically executes swaps on schedule</li>
+            <li>Grant permission &amp; agent is created automatically</li>
+            <li>Agent transfers tokens via delegation, then swaps on Uniswap</li>
           </ol>
           <p className="text-xs text-blue-300 mt-2">
-            DCA Agent Address: <code className="bg-blue-900/50 px-1 rounded">{DCA_AGENT_ADDRESS}</code>
+            DCA Agent: <code className="bg-blue-900/50 px-1 rounded">{DCA_AGENT_ADDRESS}</code>
           </p>
         </div>
 
@@ -383,22 +502,9 @@ export default function DCAAgentPage() {
           <div className="grid md:grid-cols-2 gap-6">
             {/* Left Column - Setup */}
             <div className="space-y-6">
-              {/* Step 1: Configure & Grant Permission */}
-              <div
-                className={`bg-gray-800/80 rounded-xl p-6 border ${
-                  step === 1 ? "border-blue-500" : "border-gray-700/50"
-                }`}
-              >
-                <div className="flex items-center gap-3 mb-4">
-                  <div
-                    className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${
-                      step > 1 ? "bg-green-500" : step === 1 ? "bg-blue-500" : "bg-gray-600"
-                    }`}
-                  >
-                    {step > 1 ? "✓" : "1"}
-                  </div>
-                  <h2 className="text-lg font-semibold">Configure & Grant Permission</h2>
-                </div>
+              {/* Configuration */}
+              <div className="bg-gray-800/80 rounded-xl p-6 border border-gray-700/50">
+                <h2 className="text-lg font-semibold mb-4">Configure DCA</h2>
 
                 <div className="space-y-4">
                   {/* Agent Name */}
@@ -411,7 +517,6 @@ export default function DCAAgentPage() {
                       value={agentName}
                       onChange={(e) => setAgentName(e.target.value)}
                       className="w-full px-3 py-2 bg-gray-700 rounded-lg border border-gray-600 focus:border-blue-500 outline-none"
-                      disabled={step !== 1}
                     />
                   </div>
 
@@ -425,11 +530,10 @@ export default function DCAAgentPage() {
                         value={tokenIn}
                         onChange={(e) => setTokenIn(e.target.value as TokenSymbol)}
                         className="w-full px-3 py-2 bg-gray-700 rounded-lg border border-gray-600"
-                        disabled={step !== 1}
                       >
-                        {Object.entries(TOKENS).map(([symbol, token]) => (
+                        {getTokensWithPools().map((symbol) => (
                           <option key={symbol} value={symbol}>
-                            {token.logo} {symbol}
+                            {TOKENS[symbol].logo} {symbol}
                           </option>
                         ))}
                       </select>
@@ -442,16 +546,58 @@ export default function DCAAgentPage() {
                         value={tokenOut}
                         onChange={(e) => setTokenOut(e.target.value as TokenSymbol)}
                         className="w-full px-3 py-2 bg-gray-700 rounded-lg border border-gray-600"
-                        disabled={step !== 1}
                       >
-                        {Object.entries(TOKENS)
-                          .filter(([s]) => s !== tokenIn)
-                          .map(([symbol, token]) => (
-                            <option key={symbol} value={symbol}>
-                              {token.logo} {symbol}
-                            </option>
-                          ))}
+                        {validOutputTokens.map((symbol) => (
+                          <option key={symbol} value={symbol}>
+                            {TOKENS[symbol].logo} {symbol}
+                          </option>
+                        ))}
                       </select>
+                    </div>
+                  </div>
+
+                  {/* Fee Tier */}
+                  <div>
+                    <label className="block text-sm text-gray-400 mb-1">
+                      Fee Tier
+                    </label>
+                    <div className="flex gap-2">
+                      {validFeeTiers.map((fee) => (
+                        <button
+                          key={fee}
+                          onClick={() => setFeeTier(fee)}
+                          className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                            feeTier === fee
+                              ? "bg-blue-500 text-white"
+                              : "bg-gray-700/50 text-gray-300 hover:bg-gray-600/50"
+                          }`}
+                        >
+                          {FEE_TIER_LABELS[fee] || `${fee / 10000}%`}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Pool Status */}
+                  <div className={`p-3 rounded-lg ${
+                    poolStatus === "active" ? "bg-green-500/10 border border-green-500/30" :
+                    poolStatus === "no-pool" || poolStatus === "no-liquidity" ? "bg-red-500/10 border border-red-500/30" :
+                    "bg-gray-700/30 border border-gray-600/30"
+                  }`}>
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-gray-400">Pool Status:</span>
+                      <span className={`text-sm font-medium ${
+                        poolStatus === "active" ? "text-green-400" :
+                        poolStatus === "no-pool" ? "text-red-400" :
+                        poolStatus === "no-liquidity" ? "text-yellow-400" :
+                        "text-gray-400"
+                      }`}>
+                        {poolStatus === "checking" && "Checking..."}
+                        {poolStatus === "active" && `Active ${poolLiquidity ? `(${poolLiquidity})` : ""}`}
+                        {poolStatus === "no-pool" && "No Pool"}
+                        {poolStatus === "no-liquidity" && "No Liquidity"}
+                        {!poolStatus && "Select tokens"}
+                      </span>
                     </div>
                   </div>
 
@@ -466,7 +612,6 @@ export default function DCAAgentPage() {
                         value={amount}
                         onChange={(e) => setAmount(e.target.value)}
                         className="flex-1 px-3 py-2 bg-gray-700 rounded-lg border border-gray-600 focus:border-blue-500 outline-none"
-                        disabled={step !== 1}
                       />
                       <span className="px-3 py-2 bg-gray-600 rounded-lg">
                         {TOKENS[tokenIn].symbol}
@@ -477,15 +622,14 @@ export default function DCAAgentPage() {
                   {/* Interval */}
                   <div>
                     <label className="block text-sm text-gray-400 mb-1">
-                      Interval (seconds)
+                      Interval
                     </label>
-                    <div className="grid grid-cols-2 gap-2 mb-2">
+                    <div className="grid grid-cols-4 gap-2 mb-2">
                       {INTERVAL_PRESETS.map((preset) => (
                         <button
                           key={preset.value}
                           onClick={() => setIntervalSeconds(preset.value)}
-                          disabled={step !== 1}
-                          className={`px-3 py-2 rounded-lg text-sm transition-colors ${
+                          className={`px-2 py-2 rounded-lg text-xs transition-colors ${
                             intervalSeconds === preset.value
                               ? "bg-blue-500 text-white"
                               : "bg-gray-700 text-gray-300 hover:bg-gray-600"
@@ -501,7 +645,6 @@ export default function DCAAgentPage() {
                       onChange={(e) => setIntervalSeconds(parseInt(e.target.value) || 60)}
                       className="w-full px-3 py-2 bg-gray-700 rounded-lg border border-gray-600 focus:border-blue-500 outline-none text-sm"
                       placeholder="Custom interval in seconds"
-                      disabled={step !== 1}
                       min={60}
                     />
                   </div>
@@ -517,76 +660,39 @@ export default function DCAAgentPage() {
                       onChange={(e) => setMaxExecutions(e.target.value)}
                       placeholder="Leave empty for unlimited"
                       className="w-full px-3 py-2 bg-gray-700 rounded-lg border border-gray-600 focus:border-blue-500 outline-none"
-                      disabled={step !== 1}
                     />
                   </div>
 
-                  {step === 1 && (
+                  {/* Create Button */}
+                  {createdAgentId ? (
+                    <div className="space-y-3">
+                      <div className="p-3 bg-green-500/10 border border-green-500/30 rounded-lg">
+                        <p className="text-green-400 font-medium">
+                          Agent Created!
+                        </p>
+                        <p className="text-green-300 text-sm mt-1">
+                          ID: {createdAgentId}
+                        </p>
+                      </div>
+                      <button
+                        onClick={resetForm}
+                        className="w-full py-2 bg-blue-500 hover:bg-blue-400 rounded-lg font-medium transition-colors"
+                      >
+                        Create Another Agent
+                      </button>
+                    </div>
+                  ) : (
                     <button
-                      onClick={requestPermissions}
-                      disabled={isLoading}
-                      className="w-full py-3 bg-purple-500 hover:bg-purple-400 disabled:bg-gray-600 rounded-lg font-medium transition-colors"
+                      onClick={requestPermissionsAndCreateAgent}
+                      disabled={isLoading || poolStatus !== "active"}
+                      className="w-full py-3 bg-gradient-to-r from-purple-500 to-blue-500 hover:from-purple-400 hover:to-blue-400 disabled:from-gray-600 disabled:to-gray-600 disabled:text-gray-400 rounded-lg font-medium transition-colors"
                     >
-                      {isLoading ? "Requesting..." : "Grant Permission to DCA Agent"}
+                      {isLoading ? "Processing..." :
+                       poolStatus !== "active" ? "Select a pair with liquidity" :
+                       "Grant Permission & Create Agent"}
                     </button>
                   )}
                 </div>
-              </div>
-
-              {/* Step 2: Create Agent */}
-              <div
-                className={`bg-gray-800/80 rounded-xl p-6 border ${
-                  step === 2 ? "border-blue-500" : "border-gray-700/50"
-                }`}
-              >
-                <div className="flex items-center gap-3 mb-4">
-                  <div
-                    className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${
-                      step > 2 ? "bg-green-500" : step === 2 ? "bg-blue-500" : "bg-gray-600"
-                    }`}
-                  >
-                    {step > 2 ? "✓" : "2"}
-                  </div>
-                  <h2 className="text-lg font-semibold">Create Agent</h2>
-                </div>
-
-                {permissionContext && (
-                  <div className="mb-4 p-3 bg-green-500/10 border border-green-500/30 rounded-lg">
-                    <p className="text-green-400 text-sm">✅ Permission granted!</p>
-                    <p className="text-green-300 text-xs mt-1 font-mono">
-                      {permissionContext.slice(0, 40)}...
-                    </p>
-                  </div>
-                )}
-
-                {step === 2 && (
-                  <button
-                    onClick={createAgent}
-                    disabled={isLoading}
-                    className="w-full py-3 bg-green-500 hover:bg-green-400 disabled:bg-gray-600 rounded-lg font-medium transition-colors"
-                  >
-                    {isLoading ? "Creating..." : "Create Agent"}
-                  </button>
-                )}
-
-                {step === 3 && (
-                  <div className="space-y-3">
-                    <div className="p-3 bg-green-500/10 border border-green-500/30 rounded-lg">
-                      <p className="text-green-400 font-medium">
-                        🎉 Agent Created Successfully!
-                      </p>
-                      <p className="text-green-300 text-sm mt-1">
-                        ID: {createdAgentId}
-                      </p>
-                    </div>
-                    <button
-                      onClick={resetForm}
-                      className="w-full py-2 bg-blue-500 hover:bg-blue-400 rounded-lg font-medium transition-colors"
-                    >
-                      Create Another Agent
-                    </button>
-                  </div>
-                )}
               </div>
             </div>
 
@@ -609,7 +715,7 @@ export default function DCAAgentPage() {
                     No agents yet. Create one to get started!
                   </p>
                 ) : (
-                  <div className="space-y-3">
+                  <div className="space-y-3 max-h-80 overflow-y-auto">
                     {agents.map((agent) => (
                       <div
                         key={agent._id}
@@ -630,6 +736,11 @@ export default function DCAAgentPage() {
                           </span>
                         </div>
                         <div className="text-xs text-gray-400 space-y-1">
+                          {agent.config.dca && (
+                            <p>
+                              {getTokenSymbol(agent.config.dca.tokenIn)} → {getTokenSymbol(agent.config.dca.tokenOut)}
+                            </p>
+                          )}
                           <p>
                             Every {agent.config.dca?.intervalSeconds}s •{" "}
                             {agent.executionCount} executions
