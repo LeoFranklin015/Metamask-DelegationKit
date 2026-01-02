@@ -1,25 +1,22 @@
 # yaml-language-server: $schema=./node_modules/envio/evm.schema.json
-name: DelegationManager
-description: DelegationManager indexer
-#Global contract definitions that must contain all definitions except
-#addresses. Now you can share a single handler/abi/event definitions
-#for contracts across multiple chains
+name: SpendHQ
+description: SpendHQ Delegation Indexer - tracks agent redemptions and disabled delegations
 contracts:
   - name: DelegationManager
     abi_file_path: ./abis/delegation-manager.json
     handler: ./src/EventHandlers.ts
     events:
       - event: EnabledDelegation
-      - event: DisabledDelegation
       - event: RedeemedDelegation
+      - event: DisabledDelegation
 networks:
   - id: 84532 # Base Sepolia
-    start_block: 35796890
+    start_block: 19490000
     contracts:
-      - name: DelegationManager #A reference to the global contract definition
+      - name: DelegationManager
         address: 0xdb9B1e94B5b69Df7e401DDbedE43491141047dB3
   - id: 11155111 # Sepolia
-    start_block: 9965096
+    start_block: 7558000
     contracts:
-      - name: DelegationManager #A reference to the global contract definition
-        address: 0x9D02A17dE4E68545d3a58D3a20BbBE0399E05c9c
+      - name: DelegationManager
+        address: 0xdb9B1e94B5b69Df7e401DDbedE43491141047dB3

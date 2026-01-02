@@ -1,120 +1,96 @@
 import assert from "assert";
-import { TestHelpers, User } from "generated";
-const { MockDb, Greeter, Addresses } = TestHelpers;
+import { TestHelpers } from "generated";
+const { MockDb, DelegationManager, Addresses } = TestHelpers;
 
-describe("Greeter template tests", () => {
-  it("A NewGreeting event creates a User entity", async () => {
+describe("SpendHQ Delegation Indexer tests", () => {
+  it("A RedeemedDelegation event creates Redemption, Delegation, Account, and Agent entities", async () => {
     // Initializing the mock database
     const mockDbInitial = MockDb.createMockDb();
 
-    // Initializing values for mock event
-    const userAddress = Addresses.defaultAddress;
-    const greeting = "Hi there";
+    // Mock addresses
+    const delegatorAddress = Addresses.defaultAddress;
+    const delegateAddress = "0x1234567890123456789012345678901234567890";
+    const redeemerAddress = "0x9876543210987654321098765432109876543210";
 
     // Creating a mock event
-    const mockNewGreetingEvent = Greeter.NewGreeting.createMockEvent({
-      greeting: greeting,
-      user: userAddress,
+    // delegation tuple: [delegate, delegator, authority, caveats[], salt, signature]
+    const mockEvent = DelegationManager.RedeemedDelegation.createMockEvent({
+      rootDelegator: delegatorAddress,
+      redeemer: redeemerAddress,
+      delegation: [
+        delegateAddress, // delegate
+        delegatorAddress, // delegator
+        "0x0000000000000000000000000000000000000000000000000000000000000000", // authority (ROOT)
+        [], // caveats - Array<[enforcer, terms, args]>
+        BigInt(12345), // salt
+        "0x", // signature
+      ],
     });
 
     // Processing the mock event on the mock database
-    const updatedMockDb = await Greeter.NewGreeting.processEvent({
-      event: mockNewGreetingEvent,
+    const updatedMockDb = await DelegationManager.RedeemedDelegation.processEvent({
+      event: mockEvent,
       mockDb: mockDbInitial,
     });
 
-    // Expected entity that should be created
-    const expectedUserEntity: User = {
-      id: userAddress,
-      latestGreeting: greeting,
-      numberOfGreetings: 1,
-      greetings: [greeting],
-    };
+    // Check that Account entity was created
+    const accountEntity = updatedMockDb.entities.Account.get(delegatorAddress.toLowerCase());
+    assert.ok(accountEntity, "Account entity should be created");
+    assert.equal(accountEntity?.totalRedemptions, 1);
+    assert.deepEqual(accountEntity?.uniqueAgents, [redeemerAddress.toLowerCase()]);
 
-    // Getting the entity from the mock database
-    const actualUserEntity = updatedMockDb.entities.User.get(userAddress);
-
-    // Asserting that the entity in the mock database is the same as the expected entity
-    assert.deepEqual(expectedUserEntity, actualUserEntity);
+    // Check that Agent entity was created
+    const agentEntity = updatedMockDb.entities.Agent.get(redeemerAddress.toLowerCase());
+    assert.ok(agentEntity, "Agent entity should be created");
+    assert.equal(agentEntity?.totalRedemptions, 1);
+    assert.deepEqual(agentEntity?.uniqueDelegators, [delegatorAddress.toLowerCase()]);
   });
 
-  it("2 Greetings from the same users results in that user having a greeter count of 2", async () => {
+  it("Multiple redemptions from same delegation increment redemption count", async () => {
     // Initializing the mock database
     const mockDbInitial = MockDb.createMockDb();
-    // Initializing values for mock event
-    const userAddress = Addresses.defaultAddress;
-    const greeting = "Hi there";
-    const greetingAgain = "Oh hello again";
 
-    // Creating a mock event
-    const mockNewGreetingEvent = Greeter.NewGreeting.createMockEvent({
-      greeting: greeting,
-      user: userAddress,
+    const delegatorAddress = Addresses.defaultAddress;
+    const delegateAddress = "0x1234567890123456789012345678901234567890";
+    const redeemerAddress = "0x9876543210987654321098765432109876543210";
+
+    const delegationTuple: [string, string, string, [], bigint, string] = [
+      delegateAddress,
+      delegatorAddress,
+      "0x0000000000000000000000000000000000000000000000000000000000000000",
+      [],
+      BigInt(12345),
+      "0x",
+    ];
+
+    // First redemption
+    const mockEvent1 = DelegationManager.RedeemedDelegation.createMockEvent({
+      rootDelegator: delegatorAddress,
+      redeemer: redeemerAddress,
+      delegation: delegationTuple,
     });
 
-    // Creating a mock event
-    const mockNewGreetingEvent2 = Greeter.NewGreeting.createMockEvent({
-      greeting: greetingAgain,
-      user: userAddress,
-    });
-
-    // Processing the mock event on the mock database
-    const updatedMockDb = await Greeter.NewGreeting.processEvent({
-      event: mockNewGreetingEvent,
+    const mockDb1 = await DelegationManager.RedeemedDelegation.processEvent({
+      event: mockEvent1,
       mockDb: mockDbInitial,
     });
 
-    // Processing the mock event on the updated mock database
-    const updatedMockDb2 = await Greeter.NewGreeting.processEvent({
-      event: mockNewGreetingEvent2,
-      mockDb: updatedMockDb,
+    // Second redemption of same delegation
+    const mockEvent2 = DelegationManager.RedeemedDelegation.createMockEvent({
+      rootDelegator: delegatorAddress,
+      redeemer: redeemerAddress,
+      delegation: delegationTuple,
     });
 
-    // Getting the entity from the mock database
-    const actualUserEntity = updatedMockDb2.entities.User.get(userAddress);
-
-    // Asserting that the field value of the entity in the mock database is the same as the expected field value
-    assert.equal(2, actualUserEntity?.numberOfGreetings);
-  });
-
-  it("2 Greetings from the same users results in the latest greeting being the greeting from the second event", async () => {
-    // Initializing the mock database
-    const mockDbInitial = MockDb.createMockDb();
-    // Initializing values for mock event
-    const userAddress = Addresses.defaultAddress;
-    const greeting = "Hi there";
-    const greetingAgain = "Oh hello again";
-
-    // Creating a mock event
-    const mockNewGreetingEvent = Greeter.NewGreeting.createMockEvent({
-      greeting: greeting,
-      user: userAddress,
+    const mockDb2 = await DelegationManager.RedeemedDelegation.processEvent({
+      event: mockEvent2,
+      mockDb: mockDb1,
     });
 
-    // Creating a mock event
-    const mockNewGreetingEvent2 = Greeter.NewGreeting.createMockEvent({
-      greeting: greetingAgain,
-      user: userAddress,
-    });
-
-    // Processing the mock event on the mock database
-    const updatedMockDb = await Greeter.NewGreeting.processEvent({
-      event: mockNewGreetingEvent,
-      mockDb: mockDbInitial,
-    });
-
-    // Processing the mock event on the updated mock database
-    const updatedMockDb2 = await Greeter.NewGreeting.processEvent({
-      event: mockNewGreetingEvent2,
-      mockDb: updatedMockDb,
-    });
-
-    // Getting the entity from the mock database
-    const actualUserEntity = updatedMockDb2.entities.User.get(userAddress);
-
-    const expectedGreeting: string = greetingAgain;
-
-    // Asserting that the field value of the entity in the mock database is the same as the expected field value
-    assert.equal(expectedGreeting, actualUserEntity?.latestGreeting);
+    // Check Agent has 2 total redemptions
+    const agentEntity = mockDb2.entities.Agent.get(redeemerAddress.toLowerCase());
+    assert.equal(agentEntity?.totalRedemptions, 2);
+    // But only 1 unique delegator
+    assert.equal(agentEntity?.uniqueDelegators.length, 1);
   });
 });

@@ -1,6 +1,80 @@
-type User {
-  id: ID!
-  greetings: [String!]!
-  latestGreeting: String!
-  numberOfGreetings: Int!
+# SpendHQ Indexer Schema
+# Only indexing RedeemedDelegation events
+
+# Each execution of a delegation
+type Redemption @entity {
+  id: String!                    # {chainId}-{txHash}-{logIndex}
+  chainId: Int!
+  
+  # Indexed params
+  rootDelegator: String!         # User who granted permission
+  redeemer: String!              # Agent that executed
+  
+  # From delegation tuple
+  delegate: String!              
+  delegator: String!             
+  authority: String!             # ROOT or parent hash
+  salt: String!
+  
+  # Decoded spending limit (if SpendingLimitEnforcer used)
+  spendingToken: String
+  spendingLimit: BigInt
+  spendingPeriod: BigInt
+  spendingStartDate: BigInt
+  
+  # Decoded expiry (if TimestampEnforcer used)
+  expiresAt: BigInt
+  
+  # All enforcer addresses
+  enforcers: [String!]!
+  
+  # Tx info
+  timestamp: BigInt!
+  txHash: String!
+  blockNumber: BigInt!
+}
+
+# Aggregated view per unique delegation (by salt + delegator + delegate)
+type Delegation @entity {
+  id: String!                    # {chainId}-{delegator}-{delegate}-{salt}
+  chainId: Int!
+  delegator: String!
+  delegate: String!
+  salt: String!
+  authority: String!
+  
+  # Decoded limits
+  spendingToken: String
+  spendingLimit: BigInt
+  spendingPeriod: BigInt
+  spendingStartDate: BigInt
+  expiresAt: BigInt
+  enforcers: [String!]!
+  
+  # Stats
+  redemptionCount: Int!
+  firstSeenAt: BigInt!
+  lastSeenAt: BigInt!
+}
+
+# Agent stats
+type Agent @entity {
+  id: String!                    # address
+  address: String!
+  totalRedemptions: Int!
+  uniqueDelegators: [String!]!   # List of delegators this agent serves
+  firstSeenAt: BigInt!
+  lastActiveAt: BigInt!
+  chains: [Int!]!
+}
+
+# Account (delegator) stats  
+type Account @entity {
+  id: String!                    # address
+  address: String!
+  totalRedemptions: Int!         # Total times agents executed on behalf
+  uniqueAgents: [String!]!       # Agents that have executed for this account
+  firstSeenAt: BigInt!
+  lastActiveAt: BigInt!
+  chains: [Int!]!
 }
