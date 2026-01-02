@@ -8,6 +8,10 @@ import {
   markOrderCompleted,
   markOrderExpired,
 } from "./limitOrderExecutor.js";
+import {
+  executeSavingsSupply,
+  reportSavingsExecution,
+} from "./savingsExecutor.js";
 
 // ============================================
 // Fetch due agents from backend
@@ -125,6 +129,20 @@ async function trigger() {
             // Price target not met, skip for now (will be checked again next cycle)
             results.skipped++;
             console.log(`   ⏳ Price target not met (current: ${priceCheck.currentPrice}, target: ${priceCheck.targetPrice})`);
+          }
+        } else if (agent.agentType === "savings") {
+          // Execute savings supply to Aave
+          const result = await executeSavingsSupply(agent);
+
+          // Report result to backend
+          await reportSavingsExecution(agent._id, result);
+
+          if (result.success) {
+            results.success++;
+            console.log(`   ✅ Savings Supply Success! TX: ${result.txHash}`);
+          } else {
+            results.failed++;
+            console.log(`   ❌ Failed: ${result.error}`);
           }
         } else {
           console.log(`   ⚠️ Unknown agent type: ${agent.agentType}`);

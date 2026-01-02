@@ -1,7 +1,7 @@
 import mongoose, { Document, Schema } from "mongoose";
 
 // Agent types
-export type AgentType = "dca" | "limit-order" | "stop-loss" | "recurring-payment";
+export type AgentType = "dca" | "limit-order" | "savings" | "stop-loss" | "recurring-payment";
 
 // Agent status
 export type AgentStatus = "active" | "paused" | "completed" | "failed" | "cancelled";
@@ -27,10 +27,20 @@ export interface LimitOrderConfig {
   expiryTimestamp: number; // When the order expires
 }
 
+// Savings specific config (Aave V3 supply)
+export interface SavingsConfig {
+  token: string; // Token to supply (e.g., USDC address)
+  amountPerExecution: string; // Amount to supply per execution in wei/smallest unit
+  intervalSeconds: number; // Interval between supplies in seconds
+  protocol: "aave-v3"; // Lending protocol (currently only Aave V3)
+  totalSupplied: string; // Track total amount supplied
+}
+
 // Generic agent config (can be extended for other agent types)
 export interface AgentConfig {
   dca?: DCAConfig;
   limitOrder?: LimitOrderConfig;
+  savings?: SavingsConfig;
   // Future: stopLoss?: StopLossConfig;
 }
 
@@ -109,10 +119,20 @@ const LimitOrderConfigSchema = new Schema<LimitOrderConfig>({
   expiryTimestamp: { type: Number, required: true },
 });
 
+// Savings config schema
+const SavingsConfigSchema = new Schema<SavingsConfig>({
+  token: { type: String, required: true },
+  amountPerExecution: { type: String, required: true },
+  intervalSeconds: { type: Number, required: true },
+  protocol: { type: String, enum: ["aave-v3"], default: "aave-v3" },
+  totalSupplied: { type: String, default: "0" },
+});
+
 // Agent config schema
 const AgentConfigSchema = new Schema<AgentConfig>({
   dca: { type: DCAConfigSchema },
   limitOrder: { type: LimitOrderConfigSchema },
+  savings: { type: SavingsConfigSchema },
 });
 
 // Main Agent schema
@@ -126,7 +146,7 @@ const AgentSchema = new Schema<IAgent>(
     },
     agentType: {
       type: String,
-      enum: ["dca", "limit-order", "stop-loss", "recurring-payment"],
+      enum: ["dca", "limit-order", "savings", "stop-loss", "recurring-payment"],
       required: true
     },
     name: {

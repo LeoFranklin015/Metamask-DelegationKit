@@ -2,7 +2,7 @@
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { WagmiProvider, http, createConfig } from "wagmi";
-import { sepolia } from "wagmi/chains";
+import { baseSepolia, sepolia } from "wagmi/chains";
 import {
   RainbowKitProvider,
   darkTheme,
@@ -43,10 +43,11 @@ const connectors = connectorsForWallets(
 
 const config = createConfig({
   connectors,
-  chains: [sepolia],
+  chains: [sepolia, baseSepolia],
   transports: {
     // Use a public RPC that supports EIP-7702
     [sepolia.id]: http("https://sepolia.drpc.org"),
+    [baseSepolia.id]: http("https://base-sepolia.drpc.org"),
   },
   ssr: true,
 });

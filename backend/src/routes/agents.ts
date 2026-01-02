@@ -41,6 +41,20 @@ interface CreateLimitOrderAgentBody {
   };
 }
 
+interface CreateSavingsAgentBody {
+  userAddress: string;
+  name: string;
+  permissionContext: string;
+  delegationManager: string;
+  sessionKeyAddress: string;
+  config: {
+    token: string;
+    amountPerExecution: string;
+    intervalSeconds: number;
+  };
+  maxExecutions?: number;
+}
+
 interface UpdateAgentBody {
   name?: string;
   status?: AgentStatus;
@@ -308,6 +322,91 @@ router.post("/limit-order", async (req: Request, res: Response) => {
 });
 
 // ============================================
+// POST /agents/savings - Create a new Savings agent (Aave V3)
+// ============================================
+router.post("/savings", async (req: Request, res: Response) => {
+  try {
+    const body: CreateSavingsAgentBody = req.body;
+
+    // Validation
+    if (!body.userAddress || !body.permissionContext || !body.delegationManager || !body.sessionKeyAddress) {
+      res.status(400).json({
+        success: false,
+        error: "Missing required fields: userAddress, permissionContext, delegationManager, sessionKeyAddress",
+      });
+      return;
+    }
+
+    if (!body.config || !body.config.token || !body.config.amountPerExecution) {
+      res.status(400).json({
+        success: false,
+        error: "Missing required config fields: token, amountPerExecution",
+      });
+      return;
+    }
+
+    if (!body.config.intervalSeconds || body.config.intervalSeconds < 1) {
+      res.status(400).json({
+        success: false,
+        error: "intervalSeconds must be a positive number",
+      });
+      return;
+    }
+
+    // Calculate first execution time based on interval
+    const intervalMs = body.config.intervalSeconds * 1000;
+    const nextExecution = new Date(Date.now() + intervalMs);
+
+    const agent = new Agent({
+      userAddress: body.userAddress.toLowerCase(),
+      agentType: "savings",
+      name: body.name || `Savings Agent`,
+      permissionContext: body.permissionContext,
+      delegationManager: body.delegationManager,
+      sessionKeyAddress: body.sessionKeyAddress.toLowerCase(),
+      config: {
+        savings: {
+          token: body.config.token,
+          amountPerExecution: body.config.amountPerExecution,
+          intervalSeconds: body.config.intervalSeconds,
+          protocol: "aave-v3",
+          totalSupplied: "0",
+        },
+      },
+      nextExecution,
+      maxExecutions: body.maxExecutions,
+      status: "active",
+      executionCount: 0,
+      executionLogs: [],
+    });
+
+    await agent.save();
+
+    console.log(`✅ Created Savings agent: ${agent._id} for user ${body.userAddress}`);
+    console.log(`   Token: ${body.config.token}, Amount: ${body.config.amountPerExecution}`);
+
+    res.status(201).json({
+      success: true,
+      agent: {
+        id: agent._id,
+        userAddress: agent.userAddress,
+        agentType: agent.agentType,
+        name: agent.name,
+        status: agent.status,
+        nextExecution: agent.nextExecution,
+        config: agent.config,
+      },
+    });
+  } catch (error) {
+    console.error("Error creating Savings agent:", error);
+    res.status(500).json({
+      success: false,
+      error: "Failed to create Savings agent",
+    });
+  }
+});
+
+// ============================================
 // PATCH /agents/:id - Update agent (pause, resume, update config)
 // ============================================
 router.patch("/:id", async (req: Request, res: Response) => {
@@ -456,6 +555,22 @@ router.post("/:id/log", async (req: Request, res: Response) => {
     // For limit orders, mark as completed after successful execution
     if (agent.agentType === "limit-order" && success) {
       agent.status = "completed";
+    }
+
+    // For savings agents, schedule next execution and track total supplied
+    if (agent.agentType === "savings" && agent.config.savings && success) {
+      const intervalMs = agent.config.savings.intervalSeconds * 1000;
+      agent.nextExecution = new Date(Date.now() + intervalMs);
+
+      // Update total supplied
+      const currentTotal = BigInt(agent.config.savings.totalSupplied || "0");
+      const amountSupplied = BigInt(amountIn || "0");
+      agent.config.savings.totalSupplied = (currentTotal + amountSupplied).toString();
+
+      // Check if max executions reached
+      if (agent.maxExecutions && agent.executionCount >= agent.maxExecutions) {
+        agent.status = "completed";
+      }
     }
 
     await agent.save();
