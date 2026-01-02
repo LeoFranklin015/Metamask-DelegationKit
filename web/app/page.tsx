@@ -8,8 +8,7 @@ import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 import { sepolia } from "viem/chains";
 import {
   toMetaMaskSmartAccount,
-  Implementation,
-  getSmartAccountsEnvironment,
+  Implementation
 } from "@metamask/smart-accounts-kit";
 import {
   requestExecutionPermissions,

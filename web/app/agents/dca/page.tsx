@@ -1,7 +1,7 @@
 "use client";
 
 import { ConnectButton } from "@rainbow-me/rainbowkit";
-import { useAccount, useWalletClient } from "wagmi";
+import { useAccount, useWalletClient, useSwitchChain, useChainId } from "wagmi";
 import { useState, useCallback, useEffect } from "react";
 import { parseUnits, type Address, type Hex } from "viem";
 import {
@@ -195,6 +195,11 @@ interface Agent {
 export default function DCAAgentPage() {
   const { address, isConnected } = useAccount();
   const { data: walletClient } = useWalletClient();
+  const chainId = useChainId();
+  const { switchChain, isPending: isSwitchingChain } = useSwitchChain();
+
+  // Check if on correct chain (Sepolia)
+  const isCorrectChain = chainId === sepolia.id;
 
   // Form state
   const [agentName, setAgentName] = useState("My DCA Bot");
@@ -498,7 +503,28 @@ export default function DCAAgentPage() {
           </p>
         </div>
 
-        {isConnected ? (
+        {/* Wrong Chain Warning */}
+        {isConnected && !isCorrectChain && (
+          <div className="bg-orange-500/10 border border-orange-500/30 rounded-xl p-4 mb-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="font-semibold text-orange-400">Wrong Network</h3>
+                <p className="text-sm text-orange-200">
+                  Please switch to Sepolia to use the DCA Agent
+                </p>
+              </div>
+              <button
+                onClick={() => switchChain({ chainId: sepolia.id })}
+                disabled={isSwitchingChain}
+                className="px-4 py-2 bg-orange-500 hover:bg-orange-400 disabled:bg-orange-600 disabled:cursor-not-allowed rounded-lg font-medium transition-colors"
+              >
+                {isSwitchingChain ? "Switching..." : "Switch to Sepolia"}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {isConnected && isCorrectChain ? (
           <div className="grid md:grid-cols-2 gap-6">
             {/* Left Column - Setup */}
             <div className="space-y-6">
@@ -805,7 +831,7 @@ export default function DCAAgentPage() {
               </div>
             </div>
           </div>
-        ) : (
+        ) : !isConnected ? (
           <div className="bg-gray-800/80 rounded-2xl p-12 text-center border border-gray-700/50">
             <div className="text-6xl mb-4">🤖</div>
             <p className="text-gray-400 mb-6">
@@ -813,7 +839,7 @@ export default function DCAAgentPage() {
             </p>
             <ConnectButton />
           </div>
-        )}
+        ) : null}
       </div>
     </main>
   );
