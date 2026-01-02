@@ -16,10 +16,21 @@ export interface DCAConfig {
   feeTier: number; // Uniswap fee tier (500, 3000, 10000)
 }
 
+// Limit Order specific config
+export interface LimitOrderConfig {
+  tokenIn: string; // Token to spend
+  tokenOut: string; // Token to receive
+  amountIn: string; // Amount to swap in wei/smallest unit
+  targetPrice: string; // Target price (tokenOut/tokenIn ratio)
+  direction: "buy" | "sell"; // buy = execute when price drops, sell = execute when price rises
+  feeTier: number; // Uniswap fee tier
+  expiryTimestamp: number; // When the order expires
+}
+
 // Generic agent config (can be extended for other agent types)
 export interface AgentConfig {
   dca?: DCAConfig;
-  // Future: limitOrder?: LimitOrderConfig;
+  limitOrder?: LimitOrderConfig;
   // Future: stopLoss?: StopLossConfig;
 }
 
@@ -87,9 +98,21 @@ const DCAConfigSchema = new Schema<DCAConfig>({
   feeTier: { type: Number, default: 3000 },
 });
 
+// Limit Order config schema
+const LimitOrderConfigSchema = new Schema<LimitOrderConfig>({
+  tokenIn: { type: String, required: true },
+  tokenOut: { type: String, required: true },
+  amountIn: { type: String, required: true },
+  targetPrice: { type: String, required: true },
+  direction: { type: String, enum: ["buy", "sell"], required: true },
+  feeTier: { type: Number, default: 3000 },
+  expiryTimestamp: { type: Number, required: true },
+});
+
 // Agent config schema
 const AgentConfigSchema = new Schema<AgentConfig>({
   dca: { type: DCAConfigSchema },
+  limitOrder: { type: LimitOrderConfigSchema },
 });
 
 // Main Agent schema

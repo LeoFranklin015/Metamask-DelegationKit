@@ -24,6 +24,23 @@ interface CreateDCAAgentBody {
   maxExecutions?: number;
 }
 
+interface CreateLimitOrderAgentBody {
+  userAddress: string;
+  name: string;
+  permissionContext: string;
+  delegationManager: string;
+  sessionKeyAddress: string;
+  config: {
+    tokenIn: string;
+    tokenOut: string;
+    amountIn: string;
+    targetPrice: string;
+    direction: "buy" | "sell";
+    feeTier?: number;
+    expiryTimestamp: number;
+  };
+}
+
 interface UpdateAgentBody {
   name?: string;
   status?: AgentStatus;
@@ -200,6 +217,92 @@ router.post("/dca", async (req: Request, res: Response) => {
     res.status(500).json({
       success: false,
       error: "Failed to create DCA agent",
+    });
+  }
+});
+
+// ============================================
+// POST /agents/limit-order - Create a new Limit Order agent
+// ============================================
+router.post("/limit-order", async (req: Request, res: Response) => {
+  try {
+    const body: CreateLimitOrderAgentBody = req.body;
+
+    // Validation
+    if (!body.userAddress || !body.permissionContext || !body.delegationManager || !body.sessionKeyAddress) {
+      res.status(400).json({
+        success: false,
+        error: "Missing required fields: userAddress, permissionContext, delegationManager, sessionKeyAddress",
+      });
+      return;
+    }
+
+    if (!body.config || !body.config.tokenIn || !body.config.tokenOut || !body.config.amountIn || !body.config.targetPrice) {
+      res.status(400).json({
+        success: false,
+        error: "Missing required config fields: tokenIn, tokenOut, amountIn, targetPrice",
+      });
+      return;
+    }
+
+    if (!body.config.direction || !["buy", "sell"].includes(body.config.direction)) {
+      res.status(400).json({
+        success: false,
+        error: "direction must be 'buy' or 'sell'",
+      });
+      return;
+    }
+
+    // For limit orders, start checking immediately
+    const nextExecution = new Date();
+
+    const agent = new Agent({
+      userAddress: body.userAddress.toLowerCase(),
+      agentType: "limit-order",
+      name: body.name || `Limit Order`,
+      permissionContext: body.permissionContext,
+      delegationManager: body.delegationManager,
+      sessionKeyAddress: body.sessionKeyAddress.toLowerCase(),
+      config: {
+        limitOrder: {
+          tokenIn: body.config.tokenIn,
+          tokenOut: body.config.tokenOut,
+          amountIn: body.config.amountIn,
+          targetPrice: body.config.targetPrice,
+          direction: body.config.direction,
+          feeTier: body.config.feeTier || 3000,
+          expiryTimestamp: body.config.expiryTimestamp,
+        },
+      },
+      nextExecution,
+      maxExecutions: 1, // Limit orders execute once
+      status: "active",
+      executionCount: 0,
+      executionLogs: [],
+    });
+
+    await agent.save();
+
+    console.log(`✅ Created Limit Order agent: ${agent._id} for user ${body.userAddress}`);
+    console.log(`   Target: ${body.config.targetPrice} (${body.config.direction})`);
+
+    res.status(201).json({
+      success: true,
+      agent: {
+        id: agent._id,
+        userAddress: agent.userAddress,
+        agentType: agent.agentType,
+        name: agent.name,
+        status: agent.status,
+        nextExecution: agent.nextExecution,
+        config: agent.config,
+      },
+    });
+  } catch (error) {
+    console.error("Error creating Limit Order agent:", error);
+    res.status(500).json({
+      success: false,
+      error: "Failed to create Limit Order agent",
     });
   }
 });

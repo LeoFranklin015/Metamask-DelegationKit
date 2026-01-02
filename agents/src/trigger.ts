@@ -1,6 +1,13 @@
 import "dotenv/config";
 import { BACKEND_URL } from "./config.js";
 import { executeDCASwap, reportExecution } from "./executor.js";
+import {
+  checkPriceTarget,
+  executeLimitOrder,
+  reportLimitOrderExecution,
+  markOrderCompleted,
+  markOrderExpired,
+} from "./limitOrderExecutor.js";
 
 // ============================================
 // Fetch due agents from backend
@@ -45,7 +52,7 @@ async function fetchAgent(agentId: string) {
 
 async function trigger() {
   console.log("\n" + "=".repeat(60));
-  console.log(`🚀 DCA Agent Trigger - ${new Date().toISOString()}`);
+  console.log(`🚀 Agent Trigger - ${new Date().toISOString()}`);
   console.log("=".repeat(60));
 
   try {
@@ -61,6 +68,7 @@ async function trigger() {
     const results = {
       success: 0,
       failed: 0,
+      skipped: 0,
     };
 
     // Process each agent
@@ -88,6 +96,36 @@ async function trigger() {
             results.failed++;
             console.log(`   ❌ Failed: ${result.error}`);
           }
+        } else if (agent.agentType === "limit-order") {
+          // First check if price target is met
+          const priceCheck = await checkPriceTarget(agent);
+
+          if (priceCheck.reason === "Order expired") {
+            // Mark order as expired
+            await markOrderExpired(agent._id);
+            results.skipped++;
+            console.log(`   ⏰ Order expired`);
+          } else if (priceCheck.shouldExecute) {
+            // Execute the limit order
+            const result = await executeLimitOrder(agent);
+
+            // Report result to backend
+            await reportLimitOrderExecution(agent._id, result);
+
+            if (result.success) {
+              // Mark order as completed
+              await markOrderCompleted(agent._id);
+              results.success++;
+              console.log(`   ✅ Limit Order Executed! TX: ${result.txHash}`);
+            } else {
+              results.failed++;
+              console.log(`   ❌ Failed: ${result.error}`);
+            }
+          } else {
+            // Price target not met, skip for now (will be checked again next cycle)
+            results.skipped++;
+            console.log(`   ⏳ Price target not met (current: ${priceCheck.currentPrice}, target: ${priceCheck.targetPrice})`);
+          }
         } else {
           console.log(`   ⚠️ Unknown agent type: ${agent.agentType}`);
         }
@@ -102,6 +140,7 @@ async function trigger() {
     console.log(`📊 Summary:`);
     console.log(`   ✅ Success: ${results.success}`);
     console.log(`   ❌ Failed: ${results.failed}`);
+    console.log(`   ⏳ Skipped: ${results.skipped}`);
     console.log("=".repeat(60) + "\n");
   } catch (error) {
     console.error("❌ Trigger failed:", error);
