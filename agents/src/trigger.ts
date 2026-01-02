@@ -12,6 +12,10 @@ import {
   executeSavingsSupply,
   reportSavingsExecution,
 } from "./savingsExecutor.js";
+import {
+  executeRecurringPayment,
+  reportRecurringPaymentExecution,
+} from "./recurringPaymentExecutor.js";
 
 // ============================================
 // Fetch due agents from backend
@@ -140,6 +144,20 @@ async function trigger() {
           if (result.success) {
             results.success++;
             console.log(`   ✅ Savings Supply Success! TX: ${result.txHash}`);
+          } else {
+            results.failed++;
+            console.log(`   ❌ Failed: ${result.error}`);
+          }
+        } else if (agent.agentType === "recurring-payment") {
+          // Execute recurring payment
+          const result = await executeRecurringPayment(agent);
+
+          // Report result to backend
+          await reportRecurringPaymentExecution(agent._id, result);
+
+          if (result.success) {
+            results.success++;
+            console.log(`   ✅ Recurring Payment Success! TX: ${result.txHash}`);
           } else {
             results.failed++;
             console.log(`   ❌ Failed: ${result.error}`);

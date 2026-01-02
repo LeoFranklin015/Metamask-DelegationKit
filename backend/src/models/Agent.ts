@@ -36,11 +36,21 @@ export interface SavingsConfig {
   totalSupplied: string; // Track total amount supplied
 }
 
+// Recurring Payment specific config
+export interface RecurringPaymentConfig {
+  token: string; // Token to send (e.g., USDC address)
+  amount: string; // Amount per payment in wei/smallest unit
+  recipient: string; // Address to send payments to
+  intervalSeconds: number; // Interval between payments in seconds
+  totalPaid: string; // Track total amount paid
+}
+
 // Generic agent config (can be extended for other agent types)
 export interface AgentConfig {
   dca?: DCAConfig;
   limitOrder?: LimitOrderConfig;
   savings?: SavingsConfig;
+  recurringPayment?: RecurringPaymentConfig;
   // Future: stopLoss?: StopLossConfig;
 }
 
@@ -128,11 +138,21 @@ const SavingsConfigSchema = new Schema<SavingsConfig>({
   totalSupplied: { type: String, default: "0" },
 });
 
+// Recurring Payment config schema
+const RecurringPaymentConfigSchema = new Schema<RecurringPaymentConfig>({
+  token: { type: String, required: true },
+  amount: { type: String, required: true },
+  recipient: { type: String, required: true },
+  intervalSeconds: { type: Number, required: true },
+  totalPaid: { type: String, default: "0" },
+});
+
 // Agent config schema
 const AgentConfigSchema = new Schema<AgentConfig>({
   dca: { type: DCAConfigSchema },
   limitOrder: { type: LimitOrderConfigSchema },
   savings: { type: SavingsConfigSchema },
+  recurringPayment: { type: RecurringPaymentConfigSchema },
 });
 
 // Main Agent schema

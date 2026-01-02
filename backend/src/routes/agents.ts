@@ -55,6 +55,21 @@ interface CreateSavingsAgentBody {
   maxExecutions?: number;
 }
 
+interface CreateRecurringPaymentAgentBody {
+  userAddress: string;
+  name: string;
+  permissionContext: string;
+  delegationManager: string;
+  sessionKeyAddress: string;
+  config: {
+    token: string;
+    amount: string;
+    recipient: string;
+    intervalSeconds: number;
+  };
+  maxExecutions?: number;
+}
+
 interface UpdateAgentBody {
   name?: string;
   status?: AgentStatus;
@@ -407,6 +422,91 @@ router.post("/savings", async (req: Request, res: Response) => {
 });
 
 // ============================================
+// POST /agents/recurring-payment - Create a new Recurring Payment agent
+// ============================================
+router.post("/recurring-payment", async (req: Request, res: Response) => {
+  try {
+    const body: CreateRecurringPaymentAgentBody = req.body;
+
+    // Validation
+    if (!body.userAddress || !body.permissionContext || !body.delegationManager || !body.sessionKeyAddress) {
+      res.status(400).json({
+        success: false,
+        error: "Missing required fields: userAddress, permissionContext, delegationManager, sessionKeyAddress",
+      });
+      return;
+    }
+
+    if (!body.config || !body.config.token || !body.config.amount || !body.config.recipient) {
+      res.status(400).json({
+        success: false,
+        error: "Missing required config fields: token, amount, recipient",
+      });
+      return;
+    }
+
+    if (!body.config.intervalSeconds || body.config.intervalSeconds < 1) {
+      res.status(400).json({
+        success: false,
+        error: "intervalSeconds must be a positive number",
+      });
+      return;
+    }
+
+    // Calculate first execution time based on interval
+    const intervalMs = body.config.intervalSeconds * 1000;
+    const nextExecution = new Date(Date.now() + intervalMs);
+
+    const agent = new Agent({
+      userAddress: body.userAddress.toLowerCase(),
+      agentType: "recurring-payment",
+      name: body.name || `Recurring Payment`,
+      permissionContext: body.permissionContext,
+      delegationManager: body.delegationManager,
+      sessionKeyAddress: body.sessionKeyAddress.toLowerCase(),
+      config: {
+        recurringPayment: {
+          token: body.config.token,
+          amount: body.config.amount,
+          recipient: body.config.recipient,
+          intervalSeconds: body.config.intervalSeconds,
+          totalPaid: "0",
+        },
+      },
+      nextExecution,
+      maxExecutions: body.maxExecutions,
+      status: "active",
+      executionCount: 0,
+      executionLogs: [],
+    });
+
+    await agent.save();
+
+    console.log(`✅ Created Recurring Payment agent: ${agent._id} for user ${body.userAddress}`);
+    console.log(`   Recipient: ${body.config.recipient}, Amount: ${body.config.amount}`);
+
+    res.status(201).json({
+      success: true,
+      agent: {
+        id: agent._id,
+        userAddress: agent.userAddress,
+        agentType: agent.agentType,
+        name: agent.name,
+        status: agent.status,
+        nextExecution: agent.nextExecution,
+        config: agent.config,
+      },
+    });
+  } catch (error) {
+    console.error("Error creating Recurring Payment agent:", error);
+    res.status(500).json({
+      success: false,
+      error: "Failed to create Recurring Payment agent",
+    });
+  }
+});
+
+// ============================================
 // PATCH /agents/:id - Update agent (pause, resume, update config)
 // ============================================
 router.patch("/:id", async (req: Request, res: Response) => {
@@ -566,6 +666,22 @@ router.post("/:id/log", async (req: Request, res: Response) => {
       const currentTotal = BigInt(agent.config.savings.totalSupplied || "0");
       const amountSupplied = BigInt(amountIn || "0");
       agent.config.savings.totalSupplied = (currentTotal + amountSupplied).toString();
+
+      // Check if max executions reached
+      if (agent.maxExecutions && agent.executionCount >= agent.maxExecutions) {
+        agent.status = "completed";
+      }
+    }
+
+    // For recurring payment agents, schedule next execution and track total paid
+    if (agent.agentType === "recurring-payment" && agent.config.recurringPayment && success) {
+      const intervalMs = agent.config.recurringPayment.intervalSeconds * 1000;
+      agent.nextExecution = new Date(Date.now() + intervalMs);
+
+      // Update total paid
+      const currentTotal = BigInt(agent.config.recurringPayment.totalPaid || "0");
+      const amountPaid = BigInt(amountIn || "0");
+      agent.config.recurringPayment.totalPaid = (currentTotal + amountPaid).toString();
 
       // Check if max executions reached
       if (agent.maxExecutions && agent.executionCount >= agent.maxExecutions) {
