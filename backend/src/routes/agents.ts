@@ -412,6 +412,71 @@ router.delete("/:id", async (req: Request, res: Response) => {
 });
 
 // ============================================
+// POST /agents/:id/log - Add execution log entry
+// ============================================
+router.post("/:id/log", async (req: Request, res: Response) => {
+  try {
+    const agent = await Agent.findById(req.params.id);
+
+    if (!agent) {
+      res.status(404).json({
+        success: false,
+        error: "Agent not found",
+      });
+      return;
+    }
+
+    const { success, txHash, amountIn, amountOut, error } = req.body;
+
+    // Add log entry
+    agent.executionLogs.push({
+      timestamp: new Date(),
+      status: success ? "success" : "failed",
+      txHash,
+      amountIn,
+      amountOut,
+      error,
+    });
+
+    // Update execution metadata
+    agent.lastExecution = new Date();
+    agent.executionCount += 1;
+
+    // For DCA agents, schedule next execution
+    if (agent.agentType === "dca" && agent.config.dca && success) {
+      const intervalMs = agent.config.dca.intervalSeconds * 1000;
+      agent.nextExecution = new Date(Date.now() + intervalMs);
+
+      // Check if max executions reached
+      if (agent.maxExecutions && agent.executionCount >= agent.maxExecutions) {
+        agent.status = "completed";
+      }
+    }
+
+    // For limit orders, mark as completed after successful execution
+    if (agent.agentType === "limit-order" && success) {
+      agent.status = "completed";
+    }
+
+    await agent.save();
+
+    console.log(`📊 Logged execution for agent ${agent._id}: ${success ? "success" : "failed"}`);
+
+    res.json({
+      success: true,
+      executionCount: agent.executionCount,
+      nextExecution: agent.nextExecution,
+    });
+  } catch (error) {
+    console.error("Error adding log:", error);
+    res.status(500).json({
+      success: false,
+      error: "Failed to add execution log",
+    });
+  }
+});
+
+// ============================================
 // GET /agents/:id/logs - Get execution logs for an agent
 // ============================================
 router.get("/:id/logs", async (req: Request, res: Response) => {

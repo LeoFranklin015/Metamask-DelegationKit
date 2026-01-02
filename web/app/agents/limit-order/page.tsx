@@ -1,7 +1,7 @@
 "use client";
 
 import { ConnectButton } from "@rainbow-me/rainbowkit";
-import { useAccount, useWalletClient } from "wagmi";
+import { useAccount, useWalletClient, usePublicClient } from "wagmi";
 import { useState, useCallback, useEffect } from "react";
 import { parseUnits, formatUnits, type Address, type Hex } from "viem";
 import {
@@ -9,6 +9,17 @@ import {
   type RequestExecutionPermissionsParameters,
 } from "@metamask/smart-accounts-kit/actions";
 import { sepolia } from "viem/chains";
+
+// ERC20 ABI for balance check
+const ERC20_BALANCE_ABI = [
+  {
+    name: "balanceOf",
+    type: "function",
+    inputs: [{ name: "account", type: "address" }],
+    outputs: [{ name: "", type: "uint256" }],
+    stateMutability: "view",
+  },
+] as const;
 
 // ============================================
 // Constants
@@ -170,6 +181,7 @@ interface Agent {
 export default function LimitOrderPage() {
   const { address, isConnected } = useAccount();
   const { data: walletClient } = useWalletClient();
+  const publicClient = usePublicClient();
 
   // Form state
   const [agentName, setAgentName] = useState("My Limit Order");
@@ -184,6 +196,10 @@ export default function LimitOrderPage() {
   // Pool status
   const [poolStatus, setPoolStatus] = useState<"active" | "no-pool" | null>(null);
   const [poolLiquidity, setPoolLiquidity] = useState<string | null>(null);
+
+  // Token balance
+  const [tokenInBalance, setTokenInBalance] = useState<string | null>(null);
+  const [isLoadingBalance, setIsLoadingBalance] = useState(false);
 
   // UI state
   const [isLoading, setIsLoading] = useState(false);
@@ -228,6 +244,40 @@ export default function LimitOrderPage() {
       setPoolLiquidity(null);
     }
   }, [tokenIn, tokenOut, feeTier]);
+
+  // Fetch token balance
+  useEffect(() => {
+    const fetchBalance = async () => {
+      if (!address || !publicClient) {
+        setTokenInBalance(null);
+        return;
+      }
+
+      const tokenData = TOKENS[tokenIn];
+      if (!tokenData.address) {
+        setTokenInBalance(null);
+        return;
+      }
+
+      setIsLoadingBalance(true);
+      try {
+        const balance = await publicClient.readContract({
+          address: tokenData.address,
+          abi: ERC20_BALANCE_ABI,
+          functionName: "balanceOf",
+          args: [address],
+        });
+        setTokenInBalance(formatUnits(balance, tokenData.decimals));
+      } catch (error) {
+        console.error("Failed to fetch balance:", error);
+        setTokenInBalance(null);
+      } finally {
+        setIsLoadingBalance(false);
+      }
+    };
+
+    fetchBalance();
+  }, [address, tokenIn, publicClient]);
 
   // ============================================
   // Request Permission & Create Agent
@@ -581,16 +631,40 @@ export default function LimitOrderPage() {
 
                   {/* Amount */}
                   <div>
-                    <label className="block text-sm text-gray-400 mb-1">
-                      Amount to {direction === "buy" ? "spend" : "sell"}
-                    </label>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-sm text-gray-400">
+                        Amount to {direction === "buy" ? "spend" : "sell"}
+                      </label>
+                      <div className="text-xs text-gray-400">
+                        Balance:{" "}
+                        {isLoadingBalance ? (
+                          <span className="text-gray-500">Loading...</span>
+                        ) : tokenInBalance !== null ? (
+                          <button
+                            onClick={() => setAmount(tokenInBalance)}
+                            className="text-purple-400 hover:text-purple-300"
+                          >
+                            {parseFloat(tokenInBalance).toFixed(6)} {TOKENS[tokenIn].symbol}
+                          </button>
+                        ) : (
+                          <span className="text-gray-500">--</span>
+                        )}
+                      </div>
+                    </div>
                     <div className="flex gap-2">
                       <input
-                        type="number"
+                        type="text"
                         value={amount}
                         onChange={(e) => setAmount(e.target.value)}
                         className="flex-1 px-3 py-2 bg-gray-700 rounded-lg border border-gray-600 focus:border-purple-500 outline-none"
                       />
+                      <button
+                        onClick={() => tokenInBalance && setAmount(tokenInBalance)}
+                        disabled={!tokenInBalance}
+                        className="px-3 py-2 bg-gray-600 hover:bg-gray-500 disabled:bg-gray-700 disabled:text-gray-500 rounded-lg text-xs font-medium transition-colors"
+                      >
+                        MAX
+                      </button>
                       <span className="px-3 py-2 bg-gray-600 rounded-lg">
                         {TOKENS[tokenIn].symbol}
                       </span>
@@ -600,14 +674,14 @@ export default function LimitOrderPage() {
                   {/* Target Price */}
                   <div>
                     <label className="block text-sm text-gray-400 mb-1">
-                      Target Price ({direction === "buy" ? "execute when price ≤" : "execute when price ≥"})
+                      Target Price ({direction === "buy" ? "execute when price ≥" : "execute when price ≥"})
                     </label>
                     <div className="flex gap-2">
                       <input
-                        type="number"
+                        type="text"
                         value={targetPrice}
                         onChange={(e) => setTargetPrice(e.target.value)}
-                        placeholder={direction === "buy" ? "e.g., 0.0003" : "e.g., 0.0004"}
+                        placeholder="e.g., 0.0000001"
                         className="flex-1 px-3 py-2 bg-gray-700 rounded-lg border border-gray-600 focus:border-purple-500 outline-none"
                       />
                       <span className="px-3 py-2 bg-gray-600 rounded-lg text-xs">
