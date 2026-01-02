@@ -28,7 +28,7 @@ const ERC20_BALANCE_ABI = [
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:3001";
 
 // Savings Agent address (on Base Sepolia)
-const SAVINGS_AGENT_ADDRESS = "0x4d3b8dd169fa999a3689ef6eeea640d0468de0fe" as Address;
+const SAVINGS_AGENT_ADDRESS = "0x4a5fade4f48c372b4c2cfdd1f58fb1ab1408674a" as Address;
 
 // Aave V3 Base Sepolia Pool
 const AAVE_V3_POOL = "0x8bAB6d1b75f19e9eD9fCe8b9BD338844fF79aE27" as Address;

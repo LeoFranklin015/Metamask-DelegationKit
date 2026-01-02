@@ -27,8 +27,8 @@ const ERC20_BALANCE_ABI = [
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:3001";
 
-// Subscription Agent address (reuse DCA agent for now)
-const SUBSCRIPTION_AGENT_ADDRESS = "0x4d3b8dd169fa999a3689ef6eeea640d0468de0fe" as Address;
+// Subscription Agent address
+const SUBSCRIPTION_AGENT_ADDRESS = "0x9d40c09a940a67ad7aff166c99e9422ce89aeb2d" as Address;
 
 // Netflix merchant address (where payments go)
 const NETFLIX_MERCHANT_ADDRESS = "0x4d3b8dd169fa999a3689ef6eeea640d0468de0fe" as Address;
