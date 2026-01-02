@@ -76,9 +76,9 @@ const SINGLE_DEFAULT_MODE = "0x0000000000000000000000000000000000000000000000000
 // ============================================
 
 function getSessionAccount() {
-  const privateKey = process.env.DCA_PRIVATE_KEY as Hex;
+  const privateKey = process.env.LO_PRIVATE_KEY as Hex;
   if (!privateKey) {
-    throw new Error("DCA_PRIVATE_KEY not set in environment");
+    throw new Error("LO_PRIVATE_KEY not set in environment");
   }
   return privateKeyToAccount(privateKey);
 }

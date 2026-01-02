@@ -27,8 +27,8 @@ const ERC20_BALANCE_ABI = [
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:3001";
 
-// Fixed Limit Order Agent address - same as DCA agent for now
-const LIMIT_ORDER_AGENT_ADDRESS = "0x4d3b8dd169fa999a3689ef6eeea640d0468de0fe" as Address;
+// Limit Order Agent address
+const LIMIT_ORDER_AGENT_ADDRESS = "0x0013bb0d8712dc4cacbc8cd32d4c0c851cdf18da" as Address;
 
 // All available tokens
 const TOKENS = {
