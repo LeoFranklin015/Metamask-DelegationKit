@@ -57,7 +57,7 @@ function addUnique<T>(arr: T[], item: T): T[] {
 }
 
 // =============================================================================
-// REDEEMED DELEGATION HANDLER
+// REDEEMED DELEGATION HANDLER 
 // =============================================================================
 
 DelegationManager.RedeemedDelegation.handler(async ({ event, context }) => {
