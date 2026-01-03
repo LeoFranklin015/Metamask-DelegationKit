@@ -5,7 +5,6 @@ import {
   checkPriceTarget,
   executeLimitOrder,
   reportLimitOrderExecution,
-  markOrderCompleted,
   markOrderExpired,
 } from "./limitOrderExecutor.js";
 import {
@@ -121,8 +120,6 @@ async function trigger() {
             await reportLimitOrderExecution(agent._id, result);
 
             if (result.success) {
-              // Mark order as completed
-              await markOrderCompleted(agent._id);
               results.success++;
               console.log(`   ✅ Limit Order Executed! TX: ${result.txHash}`);
             } else {

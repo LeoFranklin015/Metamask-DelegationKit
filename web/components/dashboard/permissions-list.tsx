@@ -87,10 +87,18 @@ function PermissionRow({
   const [mounted, setMounted] = useState(false)
   const tokenInfo = getTokenInfo(permission.spendingToken)
 
-  // Calculate progress
+  // Check if this is a one-time order (limit order)
+  const isOneTimeOrder = permission.agentType === "limit-order"
+
+  // Calculate progress (only for recurring permissions)
   const spent = Number(formatUnits(BigInt(permission.spent), tokenInfo.decimals))
   const limit = Number(formatUnits(BigInt(permission.monthlyLimit), tokenInfo.decimals))
   const progress = limit > 0 ? (spent / limit) * 100 : 0
+
+  // For limit orders, get the order amount
+  const limitOrderAmount = permission.config.limitOrder
+    ? Number(formatUnits(BigInt(permission.config.limitOrder.amountIn), tokenInfo.decimals))
+    : 0
 
   useEffect(() => {
     const timer = setTimeout(() => setMounted(true), index * 100)
@@ -126,33 +134,59 @@ function PermissionRow({
                 ? "text-green-400 border-green-400/30 bg-green-400/10"
                 : permission.status === "paused"
                 ? "text-yellow-400 border-yellow-400/30 bg-yellow-400/10"
+                : permission.status === "completed"
+                ? "text-blue-400 border-blue-400/30 bg-blue-400/10"
                 : "text-muted-foreground border-border bg-muted/10"
             )}
           >
-            {permission.status}
+            {permission.status === "completed" && isOneTimeOrder ? "filled" : permission.status}
           </span>
         </div>
       </div>
 
-      <div className="mt-4">
-        <div className="flex items-center justify-between mb-2">
-          <span className="font-mono text-[10px] text-muted-foreground">
-            {spent.toLocaleString(undefined, { maximumFractionDigits: 18 })} / {limit.toLocaleString(undefined, { maximumFractionDigits: 18 })} {tokenInfo.symbol}
-          </span>
-          <span className="font-mono text-[10px] text-muted-foreground">
-            {progress.toFixed(0)}%
-          </span>
+      {/* Show different content for limit orders vs recurring */}
+      {isOneTimeOrder ? (
+        <div className="mt-4">
+          <div className="flex items-center justify-between">
+            <span className="font-mono text-[10px] text-muted-foreground">
+              Order Amount
+            </span>
+            <span className="font-mono text-sm">
+              {limitOrderAmount.toLocaleString(undefined, { maximumFractionDigits: 18 })} {tokenInfo.symbol}
+            </span>
+          </div>
+          {permission.config.limitOrder && (
+            <div className="flex items-center justify-between mt-1">
+              <span className="font-mono text-[10px] text-muted-foreground">
+                Target Price
+              </span>
+              <span className="font-mono text-xs text-muted-foreground">
+                {permission.config.limitOrder.targetPrice}
+              </span>
+            </div>
+          )}
         </div>
-        <div className="h-1.5 w-full bg-border/50 overflow-hidden">
-          <div
-            className={cn(
-              "h-full transition-all duration-1000 ease-out",
-              progress > 80 ? "bg-red-400" : progress > 50 ? "bg-yellow-400" : "bg-accent"
-            )}
-            style={{ width: mounted ? `${Math.min(progress, 100)}%` : "0%" }}
-          />
+      ) : (
+        <div className="mt-4">
+          <div className="flex items-center justify-between mb-2">
+            <span className="font-mono text-[10px] text-muted-foreground">
+              {spent.toLocaleString(undefined, { maximumFractionDigits: 18 })} / {limit.toLocaleString(undefined, { maximumFractionDigits: 18 })} {tokenInfo.symbol}
+            </span>
+            <span className="font-mono text-[10px] text-muted-foreground">
+              {progress.toFixed(0)}%
+            </span>
+          </div>
+          <div className="h-1.5 w-full bg-border/50 overflow-hidden">
+            <div
+              className={cn(
+                "h-full transition-all duration-1000 ease-out",
+                progress > 80 ? "bg-red-400" : progress > 50 ? "bg-yellow-400" : "bg-accent"
+              )}
+              style={{ width: mounted ? `${Math.min(progress, 100)}%` : "0%" }}
+            />
+          </div>
         </div>
-      </div>
+      )}
 
       <div className="mt-3 flex items-center justify-between">
         <div className="flex items-center gap-2">
@@ -170,6 +204,7 @@ function PermissionRow({
               target="_blank"
               rel="noopener noreferrer"
               className="font-mono text-[10px] text-accent hover:text-accent/80 transition-colors"
+              onClick={(e) => e.stopPropagation()}
             >
               View TX
             </a>
@@ -189,14 +224,47 @@ function PermissionRow({
   )
 }
 
-function EmptyState() {
+function EmptyState({ filter }: { filter: string }) {
   return (
     <div className="border border-dashed border-border/50 bg-background/30 p-8 text-center">
-      <p className="font-mono text-sm text-muted-foreground">No active permissions</p>
+      <p className="font-mono text-sm text-muted-foreground">
+        {filter === "active" ? "No active permissions" : "No completed permissions"}
+      </p>
       <p className="font-mono text-[10px] text-muted-foreground mt-2">
-        Configure an agent to grant spending permissions
+        {filter === "active"
+          ? "Configure an agent to grant spending permissions"
+          : "Completed and cancelled permissions will appear here"}
       </p>
     </div>
+  )
+}
+
+function TabButton({
+  active,
+  onClick,
+  children,
+  count,
+}: {
+  active: boolean
+  onClick: () => void
+  children: React.ReactNode
+  count?: number
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={cn(
+        "font-mono text-[10px] uppercase tracking-widest px-3 py-1.5 border transition-colors",
+        active
+          ? "border-accent bg-accent/10 text-accent"
+          : "border-border/50 text-muted-foreground hover:border-accent/50 hover:text-accent"
+      )}
+    >
+      {children}
+      {count !== undefined && count > 0 && (
+        <span className="ml-1.5 text-[9px] opacity-70">({count})</span>
+      )}
+    </button>
   )
 }
 
@@ -223,15 +291,18 @@ function LoadingState() {
 
 export function PermissionsList() {
   const { address, isConnected } = useAccount()
-  const [permissions, setPermissions] = useState<Permission[]>([])
+  const [activePermissions, setActivePermissions] = useState<Permission[]>([])
+  const [completedPermissions, setCompletedPermissions] = useState<Permission[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [selectedPermission, setSelectedPermission] = useState<Permission | null>(null)
   const [isModalOpen, setIsModalOpen] = useState(false)
+  const [filter, setFilter] = useState<"active" | "completed">("active")
 
   const fetchPermissions = useCallback(async () => {
     if (!address) {
-      setPermissions([])
+      setActivePermissions([])
+      setCompletedPermissions([])
       setIsLoading(false)
       return
     }
@@ -239,17 +310,27 @@ export function PermissionsList() {
     try {
       setIsLoading(true)
       setError(null)
-      const response = await fetch(`${BACKEND_URL}/api/agents/user/${address}`)
 
-      if (!response.ok) {
+      // Fetch both active and completed permissions in parallel
+      const [activeResponse, completedResponse] = await Promise.all([
+        fetch(`${BACKEND_URL}/api/agents/user/${address}?status=active`),
+        fetch(`${BACKEND_URL}/api/agents/user/${address}?status=completed`),
+      ])
+
+      if (!activeResponse.ok || !completedResponse.ok) {
         throw new Error("Failed to fetch permissions")
       }
 
-      const data = await response.json()
-      if (data.success) {
-        setPermissions(data.permissions)
-      } else {
-        throw new Error(data.error || "Failed to fetch permissions")
+      const [activeData, completedData] = await Promise.all([
+        activeResponse.json(),
+        completedResponse.json(),
+      ])
+
+      if (activeData.success) {
+        setActivePermissions(activeData.permissions)
+      }
+      if (completedData.success) {
+        setCompletedPermissions(completedData.permissions)
       }
     } catch (err) {
       console.error("Error fetching permissions:", err)
@@ -289,10 +370,6 @@ export function PermissionsList() {
     )
   }
 
-  if (permissions.length === 0) {
-    return <EmptyState />
-  }
-
   const handlePermissionClick = (permission: Permission) => {
     setSelectedPermission(permission)
     setIsModalOpen(true)
@@ -308,18 +385,43 @@ export function PermissionsList() {
     fetchPermissions()
   }
 
+  const displayedPermissions = filter === "active" ? activePermissions : completedPermissions
+
   return (
     <>
-      <div className="space-y-3">
-        {permissions.map((permission, index) => (
-          <PermissionRow
-            key={permission.id}
-            permission={permission}
-            index={index}
-            onClick={() => handlePermissionClick(permission)}
-          />
-        ))}
+      {/* Tabs */}
+      <div className="flex items-center gap-2 mb-4">
+        <TabButton
+          active={filter === "active"}
+          onClick={() => setFilter("active")}
+          count={activePermissions.length}
+        >
+          Active
+        </TabButton>
+        <TabButton
+          active={filter === "completed"}
+          onClick={() => setFilter("completed")}
+          count={completedPermissions.length}
+        >
+          Completed
+        </TabButton>
       </div>
+
+      {/* Permissions List */}
+      {displayedPermissions.length === 0 ? (
+        <EmptyState filter={filter} />
+      ) : (
+        <div className="space-y-3">
+          {displayedPermissions.map((permission, index) => (
+            <PermissionRow
+              key={permission.id}
+              permission={permission}
+              index={index}
+              onClick={() => handlePermissionClick(permission)}
+            />
+          ))}
+        </div>
+      )}
 
       <PermissionDetailModal
         isOpen={isModalOpen}

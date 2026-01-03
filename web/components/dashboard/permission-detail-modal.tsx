@@ -158,6 +158,8 @@ export function PermissionDetailModal({
   const [transactions, setTransactions] = useState<Activity[]>([])
   const [isLoadingTx, setIsLoadingTx] = useState(false)
   const [isCancelling, setIsCancelling] = useState(false)
+  const [isExecuting, setIsExecuting] = useState(false)
+  const [executeResult, setExecuteResult] = useState<{ success: boolean; message: string; txHash?: string } | null>(null)
 
   const fetchTransactions = useCallback(async () => {
     if (!permission) return
@@ -209,6 +211,50 @@ export function PermissionDetailModal({
     }
   }
 
+  const handleExecute = async () => {
+    if (!permission) return
+
+    try {
+      setIsExecuting(true)
+      setExecuteResult(null)
+
+      const response = await fetch(`${BACKEND_URL}/api/agents/${permission.id}/execute`, {
+        method: "POST",
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        setExecuteResult({
+          success: false,
+          message: data.error || "Execution failed",
+        })
+        return
+      }
+
+      setExecuteResult({
+        success: data.result?.success ?? true,
+        message: data.result?.success ? "Execution successful!" : (data.result?.error || "Execution completed"),
+        txHash: data.result?.txHash,
+      })
+
+      // Refresh transactions after successful execution
+      if (data.result?.success) {
+        setTimeout(() => {
+          fetchTransactions()
+        }, 2000)
+      }
+    } catch (error) {
+      console.error("Failed to execute:", error)
+      setExecuteResult({
+        success: false,
+        message: error instanceof Error ? error.message : "Execution failed",
+      })
+    } finally {
+      setIsExecuting(false)
+    }
+  }
+
   if (!permission) return null
 
   const tokenInfo = getTokenInfo(permission.spendingToken)
@@ -218,7 +264,10 @@ export function PermissionDetailModal({
   const agentLabel = AGENT_TYPE_LABELS[permission.agentType] || permission.agentType
   const chainInfo = getChainInfo(permission.chainId)
 
-  // Get interval from config
+  // Check if this is a one-time order (limit order)
+  const isOneTimeOrder = permission.agentType === "limit-order"
+
+  // Get interval from config (only for recurring permissions)
   let interval = 0
   if (permission.config.dca) interval = permission.config.dca.intervalSeconds
   else if (permission.config.savings) interval = permission.config.savings.intervalSeconds
@@ -245,43 +294,79 @@ export function PermissionDetailModal({
                   ? "text-green-400 border-green-400/30 bg-green-400/10"
                   : permission.status === "paused"
                   ? "text-yellow-400 border-yellow-400/30 bg-yellow-400/10"
+                  : permission.status === "completed"
+                  ? "text-blue-400 border-blue-400/30 bg-blue-400/10"
                   : "text-muted-foreground border-border bg-muted/10"
               )}
             >
-              {permission.status}
+              {permission.status === "completed" && isOneTimeOrder ? "filled" : permission.status}
             </span>
           </div>
         </DialogHeader>
 
         <div className="p-6 space-y-6 max-h-[60vh] overflow-y-auto">
-          {/* Progress Section */}
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
-                Spending Progress
-              </span>
-              <span className="font-mono text-[10px] text-muted-foreground">
-                {progress.toFixed(1)}%
-              </span>
+          {/* Progress Section - different for limit orders vs recurring */}
+          {isOneTimeOrder ? (
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+                  Order Details
+                </span>
+                <span className={cn(
+                  "font-mono text-[10px] uppercase",
+                  permission.executionCount > 0 ? "text-blue-400" : "text-yellow-400"
+                )}>
+                  {permission.executionCount > 0 ? "Filled" : "Pending"}
+                </span>
+              </div>
+              {permission.config.limitOrder && (
+                <div className="border border-border/30 p-3 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="font-mono text-[10px] text-muted-foreground">Amount</span>
+                    <span className="font-mono text-sm">
+                      {Number(formatUnits(BigInt(permission.config.limitOrder.amountIn), tokenInfo.decimals)).toLocaleString(undefined, { maximumFractionDigits: 18 })} {tokenInfo.symbol}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="font-mono text-[10px] text-muted-foreground">Target Price</span>
+                    <span className="font-mono text-sm">{permission.config.limitOrder.targetPrice}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="font-mono text-[10px] text-muted-foreground">Direction</span>
+                    <span className="font-mono text-sm uppercase">{permission.config.limitOrder.direction}</span>
+                  </div>
+                </div>
+              )}
             </div>
-            <div className="h-2 w-full bg-border/50 overflow-hidden mb-2">
-              <div
-                className={cn(
-                  "h-full transition-all duration-500",
-                  progress > 80 ? "bg-red-400" : progress > 50 ? "bg-yellow-400" : "bg-accent"
-                )}
-                style={{ width: `${Math.min(progress, 100)}%` }}
-              />
+          ) : (
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+                  Spending Progress
+                </span>
+                <span className="font-mono text-[10px] text-muted-foreground">
+                  {progress.toFixed(1)}%
+                </span>
+              </div>
+              <div className="h-2 w-full bg-border/50 overflow-hidden mb-2">
+                <div
+                  className={cn(
+                    "h-full transition-all duration-500",
+                    progress > 80 ? "bg-red-400" : progress > 50 ? "bg-yellow-400" : "bg-accent"
+                  )}
+                  style={{ width: `${Math.min(progress, 100)}%` }}
+                />
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="font-mono text-xs">
+                  {spent.toLocaleString(undefined, { maximumFractionDigits: 18 })} {tokenInfo.symbol}
+                </span>
+                <span className="font-mono text-xs text-muted-foreground">
+                  / {limit.toLocaleString(undefined, { maximumFractionDigits: 18 })} {tokenInfo.symbol}
+                </span>
+              </div>
             </div>
-            <div className="flex items-center justify-between">
-              <span className="font-mono text-xs">
-                {spent.toLocaleString(undefined, { maximumFractionDigits: 18 })} {tokenInfo.symbol}
-              </span>
-              <span className="font-mono text-xs text-muted-foreground">
-                / {limit.toLocaleString(undefined, { maximumFractionDigits: 18 })} {tokenInfo.symbol}
-              </span>
-            </div>
-          </div>
+          )}
 
           {/* Details Grid */}
           <div className="grid grid-cols-2 gap-4">
@@ -431,6 +516,33 @@ export function PermissionDetailModal({
           </div>
         </div>
 
+        {/* Execution Result */}
+        {executeResult && (
+          <div className={cn(
+            "mx-6 mb-2 p-3 border",
+            executeResult.success
+              ? "border-green-400/30 bg-green-400/10"
+              : "border-red-400/30 bg-red-400/10"
+          )}>
+            <p className={cn(
+              "font-mono text-xs",
+              executeResult.success ? "text-green-400" : "text-red-400"
+            )}>
+              {executeResult.message}
+            </p>
+            {executeResult.txHash && (
+              <a
+                href={`${chainInfo.explorer}/tx/${executeResult.txHash}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-mono text-[10px] text-accent hover:text-accent/80 mt-1 inline-block"
+              >
+                View TX: {executeResult.txHash.slice(0, 10)}...{executeResult.txHash.slice(-8)} ↗
+              </a>
+            )}
+          </div>
+        )}
+
         {/* Footer Actions */}
         <div className="p-6 pt-4 border-t border-border/30 flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -438,15 +550,26 @@ export function PermissionDetailModal({
               Created {new Date(permission.createdAt).toLocaleDateString()}
             </span>
           </div>
-          {permission.status === "active" && (
-            <button
-              onClick={handleCancel}
-              disabled={isCancelling}
-              className="font-mono text-[10px] uppercase tracking-widest text-red-400 hover:text-red-300 transition-colors px-3 py-1.5 border border-red-400/30 hover:border-red-400/50 disabled:opacity-50"
-            >
-              {isCancelling ? "Cancelling..." : "Cancel Permission"}
-            </button>
-          )}
+          <div className="flex items-center gap-2">
+            {permission.status === "active" && (
+              <>
+                <button
+                  onClick={handleExecute}
+                  disabled={isExecuting || isCancelling}
+                  className="font-mono text-[10px] uppercase tracking-widest text-accent hover:text-accent/80 transition-colors px-3 py-1.5 border border-accent/30 hover:border-accent/50 disabled:opacity-50"
+                >
+                  {isExecuting ? "Executing..." : "Execute Now"}
+                </button>
+                <button
+                  onClick={handleCancel}
+                  disabled={isCancelling || isExecuting}
+                  className="font-mono text-[10px] uppercase tracking-widest text-red-400 hover:text-red-300 transition-colors px-3 py-1.5 border border-red-400/30 hover:border-red-400/50 disabled:opacity-50"
+                >
+                  {isCancelling ? "Cancelling..." : "Cancel Permission"}
+                </button>
+              </>
+            )}
+          </div>
         </div>
       </DialogContent>
     </Dialog>

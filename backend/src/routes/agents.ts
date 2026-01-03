@@ -138,15 +138,29 @@ router.get("/", async (req: Request, res: Response) => {
 // ============================================
 // GET /agents/user/:address - Get all permissions for a user (optimized for dashboard)
 // Returns enriched data with on-chain redemption counts from Envio
+// Query params:
+//   - status: "active" (default) | "completed" | "all"
 // ============================================
 router.get("/user/:address", async (req: Request, res: Response) => {
   try {
     const userAddress = req.params.address.toLowerCase();
+    const statusFilter = req.query.status as string || "active";
+
+    // Build status filter based on query param
+    let statusQuery: Record<string, unknown>;
+    if (statusFilter === "active") {
+      statusQuery = { status: { $in: ["active", "paused"] } };
+    } else if (statusFilter === "completed") {
+      statusQuery = { status: { $in: ["completed", "cancelled", "failed"] } };
+    } else {
+      // "all" - fetch everything
+      statusQuery = {};
+    }
 
     // Fetch agents from MongoDB
     const agents = await Agent.find({
       userAddress,
-      status: { $in: ["active", "paused"] }, // Only active and paused
+      ...statusQuery,
     })
       .sort({ createdAt: -1 })
       .select("-executionLogs -permissionContext"); // Exclude large fields
@@ -856,7 +870,7 @@ router.post("/:id/log", async (req: Request, res: Response) => {
       }
     }
 
-    // For limit orders, mark as completed after successful execution
+    // For limit orders, mark as completed after successful execution (one-time order)
     if (agent.agentType === "limit-order" && success) {
       agent.status = "completed";
     }
@@ -907,6 +921,68 @@ router.post("/:id/log", async (req: Request, res: Response) => {
     res.status(500).json({
       success: false,
       error: "Failed to add execution log",
+    });
+  }
+});
+
+// ============================================
+// POST /agents/:id/execute - Manually trigger execution of an agent
+// ============================================
+router.post("/:id/execute", async (req: Request, res: Response) => {
+  try {
+    const agent = await Agent.findById(req.params.id);
+
+    if (!agent) {
+      res.status(404).json({
+        success: false,
+        error: "Agent not found",
+      });
+      return;
+    }
+
+    // Only allow execution of active agents
+    if (agent.status !== "active") {
+      res.status(400).json({
+        success: false,
+        error: `Cannot execute agent with status: ${agent.status}. Agent must be active.`,
+      });
+      return;
+    }
+
+    // Determine the appropriate agent service URL based on agent type
+    const agentServiceUrl = process.env.AGENT_SERVICE_URL || "http://localhost:3002";
+
+    // Call the agent service to execute
+    const executeResponse = await fetch(`${agentServiceUrl}/execute`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        agentId: agent._id.toString(),
+        agentType: agent.agentType,
+      }),
+    });
+
+    if (!executeResponse.ok) {
+      const errorData = await executeResponse.json().catch(() => ({}));
+      res.status(500).json({
+        success: false,
+        error: errorData.error || "Failed to trigger agent execution",
+      });
+      return;
+    }
+
+    const result = await executeResponse.json();
+
+    res.json({
+      success: true,
+      message: "Execution triggered",
+      result,
+    });
+  } catch (error) {
+    console.error("Error triggering agent execution:", error);
+    res.status(500).json({
+      success: false,
+      error: "Failed to trigger agent execution",
     });
   }
 });
