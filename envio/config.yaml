@@ -4,6 +4,7 @@ description: SpendHQ Delegation Indexer - tracks agent redemptions and disabled 
 field_selection:
   transaction_fields:
     - hash
+    - input
 contracts:
   - name: DelegationManager
     abi_file_path: ./abis/delegation-manager.json

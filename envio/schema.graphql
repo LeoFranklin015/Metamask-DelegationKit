@@ -1,37 +1,31 @@
 # SpendHQ Indexer Schema
-# Only indexing RedeemedDelegation events
 
-# Each execution of a delegation
-type Redemption @entity {
-  id: String!                    # {chainId}-{txHash}-{logIndex}
-  chainId: Int!
-  
-  # Indexed params
-  rootDelegator: String!         # User who granted permission
-  redeemer: String!              # Agent that executed
-  
-  # From delegation tuple
-  delegate: String!              
-  delegator: String!             
-  authority: String!             # ROOT or parent hash
-  salt: String!
-  
-  # Decoded spending limit (if SpendingLimitEnforcer used)
-  spendingToken: String
-  spendingLimit: BigInt
-  spendingPeriod: BigInt
-  spendingStartDate: BigInt
-  
-  # Decoded expiry (if TimestampEnforcer used)
-  expiresAt: BigInt
-  
-  # All enforcer addresses
-  enforcers: [String!]!
-  
-  # Tx info
-  timestamp: BigInt!
-  txHash: String!
-  blockNumber: BigInt!
+# Account (delegator) - User who grants permissions
+type Account @entity {
+  id: String!                    # address
+  address: String!
+  totalRedemptions: Int!         # Total times agents executed on behalf
+  firstSeenAt: BigInt!
+  lastActiveAt: BigInt!
+  chains: [Int!]!
+
+  # Derived relationships
+  delegations: [Delegation!]! @derivedFrom(field: "account")
+  redemptions: [Redemption!]! @derivedFrom(field: "account")
+}
+
+# Agent - Session key that executes delegations
+type Agent @entity {
+  id: String!                    # address
+  address: String!
+  totalRedemptions: Int!
+  firstSeenAt: BigInt!
+  lastActiveAt: BigInt!
+  chains: [Int!]!
+
+  # Derived relationships
+  delegations: [Delegation!]! @derivedFrom(field: "agent")
+  redemptions: [Redemption!]! @derivedFrom(field: "agent")
 }
 
 # Aggregated view per unique delegation (by salt + delegator + delegate)
@@ -42,7 +36,11 @@ type Delegation @entity {
   delegate: String!
   salt: String!
   authority: String!
-  
+
+  # Parent relationships
+  account: Account!              # The delegator account
+  agent: Agent!                  # The delegate/agent
+
   # Decoded limits
   spendingToken: String
   spendingLimit: BigInt
@@ -50,31 +48,56 @@ type Delegation @entity {
   spendingStartDate: BigInt
   expiresAt: BigInt
   enforcers: [String!]!
-  
+
   # Stats
   redemptionCount: Int!
+  totalSpent: BigInt!            # Aggregate amount spent via this delegation
   firstSeenAt: BigInt!
   lastSeenAt: BigInt!
+
+  # Derived relationships
+  redemptions: [Redemption!]! @derivedFrom(field: "delegation")
 }
 
-# Agent stats
-type Agent @entity {
-  id: String!                    # address
-  address: String!
-  totalRedemptions: Int!
-  uniqueDelegators: [String!]!   # List of delegators this agent serves
-  firstSeenAt: BigInt!
-  lastActiveAt: BigInt!
-  chains: [Int!]!
-}
+# Each execution of a delegation
+type Redemption @entity {
+  id: String!                    # {chainId}-{txHash}-{logIndex}
+  chainId: Int!
 
-# Account (delegator) stats  
-type Account @entity {
-  id: String!                    # address
-  address: String!
-  totalRedemptions: Int!         # Total times agents executed on behalf
-  uniqueAgents: [String!]!       # Agents that have executed for this account
-  firstSeenAt: BigInt!
-  lastActiveAt: BigInt!
-  chains: [Int!]!
+  # Parent relationships
+  account: Account!              # rootDelegator
+  agent: Agent!                  # redeemer
+  delegation: Delegation!        # The delegation being redeemed
+
+  # Original indexed params (kept for direct access)
+  rootDelegator: String!         # User who granted permission
+  redeemer: String!              # Agent that executed
+
+  # From delegation tuple
+  delegate: String!
+  delegator: String!
+  authority: String!             # ROOT or parent hash
+  salt: String!
+
+  # Decoded spending limit (if SpendingLimitEnforcer used)
+  spendingToken: String
+  spendingLimit: BigInt
+  spendingPeriod: BigInt
+  spendingStartDate: BigInt
+
+  # Decoded execution details (from tx calldata)
+  executedToken: String
+  executedAmount: BigInt
+  executedRecipient: String
+
+  # Decoded expiry (if TimestampEnforcer used)
+  expiresAt: BigInt
+
+  # All enforcer addresses
+  enforcers: [String!]!
+
+  # Tx info
+  timestamp: BigInt!
+  txHash: String!
+  blockNumber: BigInt!
 }
