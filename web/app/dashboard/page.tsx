@@ -5,6 +5,7 @@ import { DashboardHeader } from "@/components/dashboard/header"
 import { DelegationTree } from "@/components/dashboard/delegation-tree"
 import { NewPermissionModal } from "@/components/dashboard/new-permission-modal"
 import { DCAConfigModal } from "@/components/dashboard/dca-config-modal"
+import { LimitOrderConfigModal } from "@/components/dashboard/limit-order-config-modal"
 import { StatsOverview } from "@/components/dashboard/stats-overview"
 import { PermissionsList } from "@/components/dashboard/permissions-list"
 import { RecentActivity } from "@/components/dashboard/recent-activity"
@@ -15,6 +16,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 export default function DashboardPage() {
   const [isNewPermissionOpen, setIsNewPermissionOpen] = useState(false)
   const [isDCAConfigOpen, setIsDCAConfigOpen] = useState(false)
+  const [isLimitOrderConfigOpen, setIsLimitOrderConfigOpen] = useState(false)
 
   return (
     <WalletGate>
@@ -72,7 +74,7 @@ export default function DashboardPage() {
             </TabsContent>
           </Tabs>
        
-        </main>
+        </main>Ok
 
         <NewPermissionModal
           isOpen={isNewPermissionOpen}
@@ -82,14 +84,21 @@ export default function DashboardPage() {
             // Open appropriate config modal based on agent type
             if (agentId === "dca") {
               setIsDCAConfigOpen(true)
+            } else if (agentId === "limit-order") {
+              setIsLimitOrderConfigOpen(true)
             }
-            // TODO: Add other agent modals (subscription, savings, limit-order)
+            // TODO: Add other agent modals (subscription, savings)
           }}
         />
 
         <DCAConfigModal
           isOpen={isDCAConfigOpen}
           onClose={() => setIsDCAConfigOpen(false)}
+        />
+
+        <LimitOrderConfigModal
+          isOpen={isLimitOrderConfigOpen}
+          onClose={() => setIsLimitOrderConfigOpen(false)}
         />
       </div>
     </div>

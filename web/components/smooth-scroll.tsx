@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useEffect, useRef } from "react"
+import { useEffect, useRef, useCallback } from "react"
 import Lenis from "lenis"
 import { gsap } from "gsap"
 import { ScrollTrigger } from "gsap/ScrollTrigger"
@@ -31,7 +31,27 @@ export function SmoothScroll({ children }: { children: React.ReactNode }) {
 
     gsap.ticker.lagSmoothing(0)
 
+    // Watch for data-scroll-locked attribute to stop/start Lenis
+    const observer = new MutationObserver((mutations) => {
+      mutations.forEach((mutation) => {
+        if (mutation.type === "attributes" && mutation.attributeName === "data-scroll-locked") {
+          const isLocked = document.documentElement.getAttribute("data-scroll-locked") === "true"
+          if (isLocked) {
+            lenis.stop()
+          } else {
+            lenis.start()
+          }
+        }
+      })
+    })
+
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["data-scroll-locked"],
+    })
+
     return () => {
+      observer.disconnect()
       lenis.destroy()
       gsap.ticker.remove(lenis.raf)
     }

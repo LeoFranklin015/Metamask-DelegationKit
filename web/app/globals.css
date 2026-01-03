@@ -73,6 +73,16 @@
   --color-sidebar-ring: var(--sidebar-ring);
 }
 
+/* Lock scroll when dialog is open - outside layer for higher priority */
+html[data-scroll-locked="true"],
+html[data-scroll-locked="true"] body {
+  overflow: hidden !important;
+  overscroll-behavior: none !important;
+}
+html[data-scroll-locked="true"] body {
+  padding-right: var(--scrollbar-width, 0);
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;
@@ -135,4 +145,43 @@
 ::selection {
   background: oklch(0.7 0.2 45);
   color: oklch(0.08 0 0);
+}
+
+/* Modal scrollbar - ALWAYS visible with orange accent */
+.scrollbar-modal {
+  scrollbar-width: auto;
+  scrollbar-color: oklch(0.7 0.2 45) oklch(0.18 0 0);
+  scrollbar-gutter: stable both-edges;
+  overflow-y: scroll !important;
+}
+
+.scrollbar-modal::-webkit-scrollbar {
+  width: 12px;
+  display: block !important;
+  -webkit-appearance: none;
+}
+
+.scrollbar-modal::-webkit-scrollbar-track {
+  background: oklch(0.18 0 0);
+  border-left: 1px solid oklch(0.3 0.05 45);
+  box-shadow: inset 0 0 4px rgba(0, 0, 0, 0.3);
+}
+
+.scrollbar-modal::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, oklch(0.7 0.2 45), oklch(0.55 0.15 45));
+  border: 2px solid oklch(0.18 0 0);
+  min-height: 60px;
+}
+
+.scrollbar-modal::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, oklch(0.8 0.22 45), oklch(0.65 0.18 45));
+}
+
+.scrollbar-modal::-webkit-scrollbar-corner {
+  background: oklch(0.18 0 0);
+}
+
+/* Ensure scrollbar track is always visible even without overflow */
+.scrollbar-modal::-webkit-scrollbar-track-piece {
+  background: oklch(0.18 0 0);
 }

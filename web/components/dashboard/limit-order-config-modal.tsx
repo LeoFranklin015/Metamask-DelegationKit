@@ -17,8 +17,8 @@ import { cn } from "@/lib/utils"
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:3001"
 
-// Fixed DCA Agent address
-const DCA_AGENT_ADDRESS = "0x4d3b8dd169fa999a3689ef6eeea640d0468de0fe" as Address
+// Limit Order Agent address
+const LIMIT_ORDER_AGENT_ADDRESS = "0x0013bb0d8712dc4cacbc8cd32d4c0c851cdf18da" as Address
 
 // All available tokens
 const TOKENS = {
@@ -70,27 +70,27 @@ type TokenSymbol = keyof typeof TOKENS
 
 // All pools with liquidity on Sepolia
 const POOLS_WITH_LIQUIDITY: Array<{ tokenA: TokenSymbol; tokenB: TokenSymbol; fee: number; liquidity: string }> = [
-  { tokenA: "WETH", tokenB: "USDC", fee: 500, liquidity: "High" },
+  { tokenA: "WETH", tokenB: "USDC", fee: 500, liquidity: "~$5K" },
   { tokenA: "WETH", tokenB: "USDC", fee: 3000, liquidity: "~$7.3K" },
   { tokenA: "WETH", tokenB: "USDC", fee: 10000, liquidity: "~$31K" },
-  { tokenA: "WETH", tokenB: "UNI", fee: 500, liquidity: "High" },
+  { tokenA: "WETH", tokenB: "UNI", fee: 500, liquidity: "~$2K" },
   { tokenA: "WETH", tokenB: "UNI", fee: 3000, liquidity: "~$7.7M" },
-  { tokenA: "WETH", tokenB: "UNI", fee: 10000, liquidity: "High" },
-  { tokenA: "WETH", tokenB: "DAI", fee: 500, liquidity: "High" },
+  { tokenA: "WETH", tokenB: "UNI", fee: 10000, liquidity: "~$5K" },
+  { tokenA: "WETH", tokenB: "DAI", fee: 500, liquidity: "~$1K" },
   { tokenA: "WETH", tokenB: "DAI", fee: 3000, liquidity: "~$6.8K" },
-  { tokenA: "WETH", tokenB: "DAI", fee: 10000, liquidity: "High" },
-  { tokenA: "WETH", tokenB: "LINK", fee: 500, liquidity: "High" },
-  { tokenA: "WETH", tokenB: "LINK", fee: 3000, liquidity: "High" },
-  { tokenA: "USDC", tokenB: "UNI", fee: 500, liquidity: "High" },
+  { tokenA: "WETH", tokenB: "DAI", fee: 10000, liquidity: "~$2K" },
+  { tokenA: "WETH", tokenB: "LINK", fee: 500, liquidity: "~$1K" },
+  { tokenA: "WETH", tokenB: "LINK", fee: 3000, liquidity: "~$1K" },
+  { tokenA: "USDC", tokenB: "UNI", fee: 500, liquidity: "~$7K" },
   { tokenA: "USDC", tokenB: "UNI", fee: 3000, liquidity: "~$7.7M" },
   { tokenA: "USDC", tokenB: "UNI", fee: 10000, liquidity: "~$31K" },
   { tokenA: "UNI", tokenB: "DAI", fee: 3000, liquidity: "~$6.8K" },
   { tokenA: "UNI", tokenB: "LINK", fee: 3000, liquidity: "~$7.7M" },
-  { tokenA: "DAI", tokenB: "LINK", fee: 500, liquidity: "High" },
+  { tokenA: "DAI", tokenB: "LINK", fee: 500, liquidity: "~$4K" },
   { tokenA: "DAI", tokenB: "LINK", fee: 3000, liquidity: "~$6.8K" },
 ]
 
-// Helper functions
+// Helper: Check if a pool exists with liquidity
 function hasPoolWithLiquidity(tokenIn: TokenSymbol, tokenOut: TokenSymbol, fee: number): { exists: boolean; liquidity?: string } {
   const pool = POOLS_WITH_LIQUIDITY.find(p =>
     ((p.tokenA === tokenIn && p.tokenB === tokenOut) || (p.tokenA === tokenOut && p.tokenB === tokenIn)) && p.fee === fee
@@ -98,6 +98,7 @@ function hasPoolWithLiquidity(tokenIn: TokenSymbol, tokenOut: TokenSymbol, fee: 
   return pool ? { exists: true, liquidity: pool.liquidity } : { exists: false }
 }
 
+// Helper: Get all tokens that have pools
 function getTokensWithPools(): TokenSymbol[] {
   const tokensInPools = new Set<TokenSymbol>()
   POOLS_WITH_LIQUIDITY.forEach(pool => {
@@ -108,6 +109,7 @@ function getTokensWithPools(): TokenSymbol[] {
   return Array.from(tokensInPools)
 }
 
+// Helper: Get valid output tokens for input
 function getValidOutputTokens(tokenIn: TokenSymbol): TokenSymbol[] {
   const validTokens = new Set<TokenSymbol>()
   POOLS_WITH_LIQUIDITY.forEach(pool => {
@@ -119,6 +121,7 @@ function getValidOutputTokens(tokenIn: TokenSymbol): TokenSymbol[] {
   return Array.from(validTokens)
 }
 
+// Helper: Get valid fee tiers for a pair
 function getValidFeeTiers(tokenIn: TokenSymbol, tokenOut: TokenSymbol): number[] {
   const validFees: number[] = []
   POOLS_WITH_LIQUIDITY.forEach(pool => {
@@ -135,27 +138,30 @@ const FEE_TIER_LABELS: Record<number, string> = {
   10000: "1%",
 }
 
-// Time units for interval selection
-const TIME_UNITS = [
-  { value: 60, label: "Minutes", short: "min" },
-  { value: 3600, label: "Hours", short: "hr" },
-  { value: 86400, label: "Days", short: "day" },
-  { value: 604800, label: "Weeks", short: "wk" },
-] as const
+// Order direction
+type OrderDirection = "buy" | "sell"
 
-type TimeUnit = typeof TIME_UNITS[number]["value"]
+// CoinGecko IDs for price fetching
+const COINGECKO_IDS: Record<TokenSymbol, string> = {
+  ETH: "ethereum",
+  WETH: "weth",
+  USDC: "usd-coin",
+  UNI: "uniswap",
+  DAI: "dai",
+  LINK: "chainlink",
+}
 
 // ============================================
 // Component
 // ============================================
 
-interface DCAConfigModalProps {
+interface LimitOrderConfigModalProps {
   isOpen: boolean
   onClose: () => void
   onSuccess?: () => void
 }
 
-export function DCAConfigModal({ isOpen, onClose, onSuccess }: DCAConfigModalProps) {
+export function LimitOrderConfigModal({ isOpen, onClose, onSuccess }: LimitOrderConfigModalProps) {
   const { address } = useAccount()
   const { data: walletClient } = useWalletClient()
   const chainId = useChainId()
@@ -164,17 +170,14 @@ export function DCAConfigModal({ isOpen, onClose, onSuccess }: DCAConfigModalPro
   const isCorrectChain = chainId === sepolia.id
 
   // Form state
-  const [agentName, setAgentName] = useState("My DCA Bot")
+  const [agentName, setAgentName] = useState("My Limit Order")
   const [tokenIn, setTokenIn] = useState<TokenSymbol>("USDC")
   const [tokenOut, setTokenOut] = useState<TokenSymbol>("WETH")
-  const [amount, setAmount] = useState("1")
-  const [intervalValue, setIntervalValue] = useState(1)
-  const [intervalUnit, setIntervalUnit] = useState<TimeUnit>(86400) // Default: days
-  const [maxExecutions, setMaxExecutions] = useState("")
+  const [amount, setAmount] = useState("100")
+  const [targetPrice, setTargetPrice] = useState("")
+  const [direction, setDirection] = useState<OrderDirection>("buy")
   const [feeTier, setFeeTier] = useState(3000)
-
-  // Calculate interval in seconds
-  const intervalSeconds = intervalValue * intervalUnit
+  const [expiryDays, setExpiryDays] = useState(7)
 
   // Get token balance
   const tokenInData = TOKENS[tokenIn]
@@ -185,25 +188,30 @@ export function DCAConfigModal({ isOpen, onClose, onSuccess }: DCAConfigModalPro
   })
 
   // Pool status
-  const [poolStatus, setPoolStatus] = useState<"checking" | "active" | "no-pool" | "no-liquidity" | null>(null)
+  const [poolStatus, setPoolStatus] = useState<"active" | "no-pool" | null>(null)
   const [poolLiquidity, setPoolLiquidity] = useState<string | null>(null)
+
+  // Current exchange rate
+  const [currentRate, setCurrentRate] = useState<string | null>(null)
+  const [isLoadingRate, setIsLoadingRate] = useState(false)
 
   // UI state
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
 
+  // Valid tokens and fee tiers
   const validOutputTokens = getValidOutputTokens(tokenIn)
   const validFeeTiers = getValidFeeTiers(tokenIn, tokenOut)
 
-  // Auto-select valid output token
+  // Auto-select first valid output token if current is invalid
   useEffect(() => {
     if (!validOutputTokens.includes(tokenOut) && validOutputTokens.length > 0) {
       setTokenOut(validOutputTokens[0])
     }
   }, [tokenIn, validOutputTokens, tokenOut])
 
-  // Auto-select valid fee tier
+  // Auto-select first valid fee tier if current is invalid
   useEffect(() => {
     if (!validFeeTiers.includes(feeTier) && validFeeTiers.length > 0) {
       setFeeTier(validFeeTiers[0])
@@ -222,6 +230,42 @@ export function DCAConfigModal({ isOpen, onClose, onSuccess }: DCAConfigModalPro
     }
   }, [tokenIn, tokenOut, feeTier])
 
+  // Fetch current exchange rate
+  useEffect(() => {
+    const fetchRate = async () => {
+      setIsLoadingRate(true)
+      try {
+        const tokenInId = COINGECKO_IDS[tokenIn]
+        const tokenOutId = COINGECKO_IDS[tokenOut]
+
+        const response = await fetch(
+          `https://api.coingecko.com/api/v3/simple/price?ids=${tokenInId},${tokenOutId}&vs_currencies=usd`
+        )
+        const data = await response.json()
+
+        const tokenInPrice = data[tokenInId]?.usd
+        const tokenOutPrice = data[tokenOutId]?.usd
+
+        if (tokenInPrice && tokenOutPrice) {
+          // Calculate how much tokenOut you get for 1 tokenIn
+          const rate = tokenInPrice / tokenOutPrice
+          setCurrentRate(rate.toPrecision(6))
+        } else {
+          setCurrentRate(null)
+        }
+      } catch {
+        setCurrentRate(null)
+      } finally {
+        setIsLoadingRate(false)
+      }
+    }
+
+    fetchRate()
+    // Refresh every 30 seconds
+    const interval = setInterval(fetchRate, 30000)
+    return () => clearInterval(interval)
+  }, [tokenIn, tokenOut])
+
   const handleCreate = useCallback(async () => {
     if (!walletClient || !address) return
 
@@ -231,12 +275,17 @@ export function DCAConfigModal({ isOpen, onClose, onSuccess }: DCAConfigModalPro
       return
     }
 
+    if (!targetPrice || parseFloat(targetPrice) <= 0) {
+      setError("Please enter a valid target price")
+      return
+    }
+
     setIsLoading(true)
     setError(null)
 
     try {
       const amountInWei = parseUnits(amount, tokenData.decimals)
-      const expiry = Math.floor(Date.now() / 1000) + 30 * 24 * 60 * 60
+      const expiry = Math.floor(Date.now() / 1000) + expiryDays * 24 * 60 * 60
 
       const permissionParams: RequestExecutionPermissionsParameters = [
         {
@@ -244,14 +293,14 @@ export function DCAConfigModal({ isOpen, onClose, onSuccess }: DCAConfigModalPro
           expiry,
           signer: {
             type: "account",
-            data: { address: DCA_AGENT_ADDRESS },
+            data: { address: LIMIT_ORDER_AGENT_ADDRESS },
           },
           permission: {
             type: "erc20-token-periodic",
             data: {
               tokenAddress: tokenData.address,
               periodAmount: amountInWei,
-              periodDuration: intervalSeconds,
+              periodDuration: expiryDays * 24 * 60 * 60,
             },
           },
           isAdjustmentAllowed: true,
@@ -271,28 +320,27 @@ export function DCAConfigModal({ isOpen, onClose, onSuccess }: DCAConfigModalPro
       const permissionContext = granted[0].context
       const delegationManager = granted[0].signerMeta.delegationManager
 
-      // Create agent in backend
       const tokenOutData = TOKENS[tokenOut]
-      const tokenOutAddr = tokenOut === "ETH" ? TOKENS.WETH.address : tokenOutData.address
+      const tokenOutAddr = tokenOutData.address
 
       const payload = {
         userAddress: address,
         name: agentName,
         permissionContext,
         delegationManager,
-        sessionKeyAddress: DCA_AGENT_ADDRESS,
+        sessionKeyAddress: LIMIT_ORDER_AGENT_ADDRESS,
         config: {
           tokenIn: tokenData.address,
           tokenOut: tokenOutAddr,
-          amountPerExecution: amountInWei.toString(),
-          intervalSeconds,
-          maxSlippage: 1.0,
+          amountIn: amountInWei.toString(),
+          targetPrice,
+          direction,
           feeTier,
+          expiryTimestamp: expiry,
         },
-        maxExecutions: maxExecutions ? parseInt(maxExecutions) : undefined,
       }
 
-      const response = await fetch(`${BACKEND_URL}/api/agents/dca`, {
+      const response = await fetch(`${BACKEND_URL}/api/agents/limit-order`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -307,49 +355,52 @@ export function DCAConfigModal({ isOpen, onClose, onSuccess }: DCAConfigModalPro
       setSuccess(true)
       onSuccess?.()
 
-      // Close after short delay
       setTimeout(() => {
         onClose()
         setSuccess(false)
+        setAgentName("My Limit Order")
+        setAmount("100")
+        setTargetPrice("")
       }, 2000)
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err)
-      if (msg.includes("User rejected")) {
-        setError("You rejected the permission request")
+      const errorMessage = err instanceof Error ? err.message : String(err)
+
+      if (errorMessage.includes("User rejected") || errorMessage.includes("user rejected")) {
+        setError("You rejected the permission request.")
       } else {
-        setError(msg)
+        setError(errorMessage)
       }
     } finally {
       setIsLoading(false)
     }
-  }, [walletClient, address, tokenIn, tokenOut, amount, intervalSeconds, maxExecutions, agentName, feeTier, onClose, onSuccess])
+  }, [walletClient, address, tokenIn, tokenOut, amount, targetPrice, direction, expiryDays, agentName, feeTier, onClose, onSuccess])
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="sm:max-w-2xl bg-card/80 backdrop-blur-xl border-border/30 shadow-2xl shadow-black/20 h-auto max-h-[98vh] overflow-y-auto p-5">
         <DialogHeader>
           <DialogTitle className="font-[var(--font-bebas)] text-2xl tracking-tight">
-            Configure DCA Agent
+            Configure Limit Order
           </DialogTitle>
           <p className="font-mono text-xs text-muted-foreground">
-            Dollar-cost average into any token automatically
+            Set target price and execute automatically via Uniswap
           </p>
         </DialogHeader>
 
-        {/* Wrong Chain Warning */}
+        {/* Chain Check */}
         {!isCorrectChain && (
-          <div className="border border-yellow-500/30 bg-yellow-500/10 p-4">
+          <div className="border border-accent/30 bg-accent/5 p-4 mt-2">
             <div className="flex items-center justify-between">
               <div>
-                <p className="font-mono text-xs text-yellow-400 font-medium">Wrong Network</p>
-                <p className="font-mono text-[10px] text-yellow-400/70 mt-1">
-                  Switch to Sepolia to continue
+                <p className="font-mono text-xs text-accent">Wrong Network</p>
+                <p className="font-mono text-[10px] text-muted-foreground">
+                  Please switch to Sepolia
                 </p>
               </div>
               <button
                 onClick={() => switchChain({ chainId: sepolia.id })}
                 disabled={isSwitchingChain}
-                className="bg-yellow-500 text-background px-3 py-1.5 font-mono text-[10px] uppercase tracking-widest hover:bg-yellow-400 transition-colors disabled:opacity-50"
+                className="bg-accent text-background px-3 py-1.5 font-mono text-[10px] uppercase tracking-widest hover:bg-accent/90 transition-colors disabled:opacity-50"
               >
                 {isSwitchingChain ? "Switching..." : "Switch"}
               </button>
@@ -362,7 +413,7 @@ export function DCAConfigModal({ isOpen, onClose, onSuccess }: DCAConfigModalPro
             {/* Agent Name */}
             <div className="space-y-2">
               <label className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
-                DCA Name
+                Order Name
               </label>
               <input
                 type="text"
@@ -372,11 +423,42 @@ export function DCAConfigModal({ isOpen, onClose, onSuccess }: DCAConfigModalPro
               />
             </div>
 
+            {/* Order Direction */}
+            <div className="space-y-2">
+              <label className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+                Order Type
+              </label>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  onClick={() => setDirection("buy")}
+                  className={cn(
+                    "py-2.5 font-mono text-xs uppercase tracking-widest transition-colors border",
+                    direction === "buy"
+                      ? "bg-green-500/20 border-green-500/50 text-green-400"
+                      : "bg-background/50 border-border/50 text-muted-foreground hover:border-border"
+                  )}
+                >
+                  Buy (Price Below)
+                </button>
+                <button
+                  onClick={() => setDirection("sell")}
+                  className={cn(
+                    "py-2.5 font-mono text-xs uppercase tracking-widest transition-colors border",
+                    direction === "sell"
+                      ? "bg-red-500/20 border-red-500/50 text-red-400"
+                      : "bg-background/50 border-border/50 text-muted-foreground hover:border-border"
+                  )}
+                >
+                  Sell (Price Above)
+                </button>
+              </div>
+            </div>
+
             {/* Token Selection */}
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <label className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
-                  Spend (Token In)
+                  {direction === "buy" ? "Pay With" : "Sell Token"}
                 </label>
                 <select
                   value={tokenIn}
@@ -392,7 +474,7 @@ export function DCAConfigModal({ isOpen, onClose, onSuccess }: DCAConfigModalPro
               </div>
               <div className="space-y-2">
                 <label className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
-                  Buy (Token Out)
+                  {direction === "buy" ? "Buy Token" : "Receive Token"}
                 </label>
                 <select
                   value={tokenOut}
@@ -419,10 +501,10 @@ export function DCAConfigModal({ isOpen, onClose, onSuccess }: DCAConfigModalPro
                     key={fee}
                     onClick={() => setFeeTier(fee)}
                     className={cn(
-                      "flex-1 px-3 py-2 font-mono text-xs transition-colors border",
+                      "flex-1 py-2 font-mono text-xs transition-colors border",
                       feeTier === fee
-                        ? "bg-accent text-background border-accent"
-                        : "bg-background/50 text-muted-foreground border-border/50 hover:border-accent/50"
+                        ? "bg-accent/20 border-accent/50 text-accent"
+                        : "bg-background/50 border-border/50 text-muted-foreground hover:border-border"
                     )}
                   >
                     {FEE_TIER_LABELS[fee] || `${fee / 10000}%`}
@@ -435,8 +517,8 @@ export function DCAConfigModal({ isOpen, onClose, onSuccess }: DCAConfigModalPro
             <div className={cn(
               "p-3 border",
               poolStatus === "active"
-                ? "border-green-500/30 bg-green-500/10"
-                : "border-red-500/30 bg-red-500/10"
+                ? "border-green-500/30 bg-green-500/5"
+                : "border-red-500/30 bg-red-500/5"
             )}>
               <div className="flex items-center justify-between">
                 <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
@@ -457,7 +539,7 @@ export function DCAConfigModal({ isOpen, onClose, onSuccess }: DCAConfigModalPro
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <label className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
-                  Amount per execution
+                  Amount to {direction === "buy" ? "spend" : "sell"}
                 </label>
                 <span className="font-mono text-[10px] text-muted-foreground">
                   Balance:{" "}
@@ -495,35 +577,87 @@ export function DCAConfigModal({ isOpen, onClose, onSuccess }: DCAConfigModalPro
               </div>
             </div>
 
-            {/* Interval */}
+            {/* Target Price */}
             <div className="space-y-2">
-              <label className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
-                Execution Interval
-              </label>
-              <div className="flex items-center gap-3">
-                <span className="font-mono text-xs text-muted-foreground">Every</span>
+              <div className="flex items-center justify-between">
+                <label className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+                  Target Price
+                </label>
+                <span className="font-mono text-[10px] text-muted-foreground">
+                  Current:{" "}
+                  {isLoadingRate ? (
+                    "..."
+                  ) : currentRate ? (
+                    <button
+                      onClick={() => setTargetPrice(currentRate)}
+                      className="text-accent hover:underline"
+                    >
+                      {currentRate} {tokenOut}/{tokenIn}
+                    </button>
+                  ) : (
+                    "N/A"
+                  )}
+                </span>
+              </div>
+              <div className="flex gap-2">
                 <input
-                  type="number"
-                  min={1}
-                  value={intervalValue}
-                  onChange={(e) => setIntervalValue(Math.max(1, parseInt(e.target.value) || 1))}
-                  className="w-16 bg-background/50 border border-border/50 px-2 py-2 font-mono text-sm focus:outline-none focus:border-accent/50 text-center"
-                />
-                <select
-                  value={intervalUnit}
-                  onChange={(e) => setIntervalUnit(Number(e.target.value) as TimeUnit)}
+                  type="text"
+                  value={targetPrice}
+                  onChange={(e) => setTargetPrice(e.target.value)}
+                  placeholder={currentRate ? `Current: ${currentRate}` : "e.g., 0.0004"}
                   className="flex-1 bg-background/50 border border-border/50 px-3 py-2 font-mono text-sm focus:outline-none focus:border-accent/50"
+                />
+                <button
+                  onClick={() => currentRate && setTargetPrice(currentRate)}
+                  disabled={!currentRate}
+                  className="px-2 py-2 bg-background/50 border border-border/50 font-mono text-[10px] text-muted-foreground hover:text-accent hover:border-accent/50 transition-colors disabled:opacity-50"
                 >
-                  {TIME_UNITS.map((unit) => (
-                    <option key={unit.value} value={unit.value}>
-                      {unit.label}
-                    </option>
-                  ))}
-                </select>
+                  USE
+                </button>
+                <span className="px-3 py-2 bg-background/50 border border-border/50 font-mono text-xs text-muted-foreground whitespace-nowrap">
+                  {tokenOut}/{tokenIn}
+                </span>
               </div>
               <p className="font-mono text-[10px] text-muted-foreground/60">
-                = {intervalSeconds.toLocaleString()} seconds between executions
+                {direction === "buy"
+                  ? `Buy ${tokenOut} when 1 ${tokenIn} gets you ≥ ${targetPrice || "?"} ${tokenOut}`
+                  : `Sell ${tokenIn} when 1 ${tokenIn} is worth ≥ ${targetPrice || "?"} ${tokenOut}`
+                }
+                {currentRate && targetPrice && (
+                  <span className={cn(
+                    "ml-2",
+                    parseFloat(targetPrice) > parseFloat(currentRate) ? "text-green-400" : "text-red-400"
+                  )}>
+                    ({parseFloat(targetPrice) > parseFloat(currentRate)
+                      ? `+${(((parseFloat(targetPrice) - parseFloat(currentRate)) / parseFloat(currentRate)) * 100).toFixed(2)}%`
+                      : `${(((parseFloat(targetPrice) - parseFloat(currentRate)) / parseFloat(currentRate)) * 100).toFixed(2)}%`
+                    } from current)
+                  </span>
+                )}
               </p>
+            </div>
+
+            {/* Expiry */}
+            <div className="space-y-2">
+              <label className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+                Order Expiry
+              </label>
+              <div className="grid grid-cols-4 gap-2">
+                {[1, 7, 14, 30].map((days) => (
+                  <button
+                    key={days}
+                    onClick={() => setExpiryDays(days)}
+                    className={cn(
+                      "py-2 font-mono text-xs transition-colors border",
+                      expiryDays === days
+                        ? "bg-accent/20 border-accent/50 text-accent"
+                        : "bg-background/50 border-border/50 text-muted-foreground hover:border-border"
+                    )}
+                  >
+                    {days}d
+                  </button>
+                ))}
+              </div>
             </div>
 
           </div>
@@ -542,7 +676,7 @@ export function DCAConfigModal({ isOpen, onClose, onSuccess }: DCAConfigModalPro
             {/* Success */}
             {success && (
               <div className="border border-green-500/30 bg-green-500/10 p-3">
-                <p className="font-mono text-xs text-green-400">Agent created successfully!</p>
+                <p className="font-mono text-xs text-green-400">Limit order created successfully!</p>
               </div>
             )}
 
@@ -556,10 +690,14 @@ export function DCAConfigModal({ isOpen, onClose, onSuccess }: DCAConfigModalPro
               </button>
               <button
                 onClick={handleCreate}
-                disabled={isLoading || poolStatus !== "active" || success}
+                disabled={isLoading || poolStatus !== "active" || !targetPrice || success}
                 className="flex-1 bg-accent text-background px-4 py-2.5 font-mono text-xs uppercase tracking-widest hover:bg-accent/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {isLoading ? "Processing..." : success ? "Created!" : "Create Agent"}
+                {isLoading ? "Processing..." :
+                 success ? "Created!" :
+                 poolStatus !== "active" ? "Select Valid Pair" :
+                 !targetPrice ? "Enter Target Price" :
+                 "Create Order"}
               </button>
             </div>
           </div>
