@@ -4,7 +4,6 @@ import { ConnectButton } from '@rainbow-me/rainbowkit'
 import { createWalletClient, custom, http, parseUnits, type Address, encodeFunctionData, erc20Abi } from "viem";
 import { erc7715ProviderActions } from "@metamask/smart-accounts-kit/actions";
 import { erc7710WalletActions } from "@metamask/smart-accounts-kit/actions";
-import { createDelegation } from "@metamask/smart-accounts-kit";
 import { sepolia as chain } from "viem/chains";
 
 const page = () => {

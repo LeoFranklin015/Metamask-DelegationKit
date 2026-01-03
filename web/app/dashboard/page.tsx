@@ -3,8 +3,8 @@
 import { useState } from "react"
 import { DashboardHeader } from "@/components/dashboard/header"
 import { DelegationTree } from "@/components/dashboard/delegation-tree"
-import { AgentConfigModal } from "@/components/dashboard/agent-config-modal"
 import { NewPermissionModal } from "@/components/dashboard/new-permission-modal"
+import { DCAConfigModal } from "@/components/dashboard/dca-config-modal"
 import { StatsOverview } from "@/components/dashboard/stats-overview"
 import { PermissionsList } from "@/components/dashboard/permissions-list"
 import { RecentActivity } from "@/components/dashboard/recent-activity"
@@ -13,9 +13,8 @@ import { AnimatedNoise } from "@/components/animated-noise"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
 export default function DashboardPage() {
-  const [selectedAgent, setSelectedAgent] = useState<string | null>(null)
-  const [isConfigOpen, setIsConfigOpen] = useState(false)
   const [isNewPermissionOpen, setIsNewPermissionOpen] = useState(false)
+  const [isDCAConfigOpen, setIsDCAConfigOpen] = useState(false)
 
   return (
     <WalletGate>
@@ -75,22 +74,22 @@ export default function DashboardPage() {
        
         </main>
 
-        <AgentConfigModal
-          agentId={selectedAgent}
-          isOpen={isConfigOpen}
-          onClose={() => {
-            setIsConfigOpen(false)
-            setSelectedAgent(null)
-          }}
-        />
-
         <NewPermissionModal
           isOpen={isNewPermissionOpen}
           onClose={() => setIsNewPermissionOpen(false)}
           onSelectAgent={(agentId) => {
-            setSelectedAgent(agentId)
-            setIsConfigOpen(true)
+            setIsNewPermissionOpen(false)
+            // Open appropriate config modal based on agent type
+            if (agentId === "dca") {
+              setIsDCAConfigOpen(true)
+            }
+            // TODO: Add other agent modals (subscription, savings, limit-order)
           }}
+        />
+
+        <DCAConfigModal
+          isOpen={isDCAConfigOpen}
+          onClose={() => setIsDCAConfigOpen(false)}
         />
       </div>
     </div>
