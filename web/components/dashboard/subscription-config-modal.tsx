@@ -210,13 +210,30 @@ export function SubscriptionConfigModal({ isOpen, onClose, onSuccess }: Subscrip
         permissionParams
       )
 
-      const granted = permissions as Array<{
+      // Type for the permission response
+      type PermissionResponse = {
         context: Hex
+        chainId: string
+        permission: {
+          data: {
+            tokenAddress: string
+            periodAmount: string
+            periodDuration: number
+            startTime: number
+          }
+        }
         signerMeta: { delegationManager: Address }
-      }>
+      }
 
-      const permissionContext = granted[0].context
-      const delegationManager = granted[0].signerMeta.delegationManager
+      const granted = permissions as PermissionResponse[]
+      const permission = granted[0]
+
+      const permissionContext = permission.context
+      const delegationManager = permission.signerMeta.delegationManager
+
+      // Extract permission metadata for on-chain correlation
+      const permissionData = permission.permission.data
+      const chainIdNum = parseInt(permission.chainId, 16)
 
       const payload = {
         userAddress: address,
@@ -224,6 +241,12 @@ export function SubscriptionConfigModal({ isOpen, onClose, onSuccess }: Subscrip
         permissionContext,
         delegationManager,
         sessionKeyAddress: SUBSCRIPTION_AGENT_ADDRESS,
+        // Permission metadata for on-chain correlation
+        chainId: chainIdNum,
+        spendingToken: permissionData.tokenAddress,
+        spendingLimit: BigInt(permissionData.periodAmount).toString(),
+        spendingPeriod: permissionData.periodDuration,
+        startTime: permissionData.startTime,
         config: {
           token: USDC.address,
           amount: amountInWei.toString(),

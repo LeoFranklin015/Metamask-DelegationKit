@@ -64,7 +64,7 @@ DelegationManager.RedeemedDelegation.handler(async ({ event, context }) => {
   const chainId = event.chainId;
   const timestamp = BigInt(event.block.timestamp);
   const blockNumber = BigInt(event.block.number);
-  const txHash = event.block.hash; // Use block hash since transaction is empty object
+  const txHash = event.transaction.hash; // Transaction hash from event.transaction
   const logIndex = event.logIndex;
 
   // Indexed params

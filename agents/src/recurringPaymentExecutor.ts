@@ -12,6 +12,9 @@ import { privateKeyToAccount } from "viem/accounts";
 import { sepolia } from "viem/chains";
 import { ERC20_ABI, BACKEND_URL } from "./config.js";
 
+// RPC URL from environment or default to public Sepolia RPC
+const RPC_URL = process.env.RPC_URL || "https://ethereum-sepolia-rpc.publicnode.com";
+
 // ============================================
 // Types
 // ============================================
@@ -100,12 +103,12 @@ export async function executeRecurringPayment(agent: RecurringPaymentAgent): Pro
     const walletClient = createWalletClient({
       account: sessionAccount,
       chain: sepolia,
-      transport: http("https://eth-sepolia.g.alchemy.com/v2/Ofk6JzIo12fA2DpAck3Zq"),
+      transport: http(RPC_URL),
     });
 
     const publicClient = createPublicClient({
       chain: sepolia,
-      transport: http("https://eth-sepolia.g.alchemy.com/v2/Ofk6JzIo12fA2DpAck3Zq"),
+      transport: http(RPC_URL),
     });
 
     const { token, amount, recipient } = agent.config.recurringPayment;

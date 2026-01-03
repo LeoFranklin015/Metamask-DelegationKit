@@ -263,13 +263,30 @@ export function DCAConfigModal({ isOpen, onClose, onSuccess }: DCAConfigModalPro
         permissionParams
       )
 
-      const granted = permissions as Array<{
+      // Type for the permission response
+      type PermissionResponse = {
         context: Hex
+        chainId: string
+        permission: {
+          data: {
+            tokenAddress: string
+            periodAmount: string
+            periodDuration: number
+            startTime: number
+          }
+        }
         signerMeta: { delegationManager: Address }
-      }>
+      }
 
-      const permissionContext = granted[0].context
-      const delegationManager = granted[0].signerMeta.delegationManager
+      const granted = permissions as PermissionResponse[]
+      const permission = granted[0]
+
+      const permissionContext = permission.context
+      const delegationManager = permission.signerMeta.delegationManager
+
+      // Extract permission metadata for on-chain correlation
+      const permissionData = permission.permission.data
+      const chainIdNum = parseInt(permission.chainId, 16)
 
       // Create agent in backend
       const tokenOutData = TOKENS[tokenOut]
@@ -281,6 +298,12 @@ export function DCAConfigModal({ isOpen, onClose, onSuccess }: DCAConfigModalPro
         permissionContext,
         delegationManager,
         sessionKeyAddress: DCA_AGENT_ADDRESS,
+        // Permission metadata for on-chain correlation
+        chainId: chainIdNum,
+        spendingToken: permissionData.tokenAddress,
+        spendingLimit: BigInt(permissionData.periodAmount).toString(),
+        spendingPeriod: permissionData.periodDuration,
+        startTime: permissionData.startTime,
         config: {
           tokenIn: tokenData.address,
           tokenOut: tokenOutAddr,

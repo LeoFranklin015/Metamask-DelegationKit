@@ -1,6 +1,9 @@
 # yaml-language-server: $schema=./node_modules/envio/evm.schema.json
 name: SpendHQ
 description: SpendHQ Delegation Indexer - tracks agent redemptions and disabled delegations
+field_selection:
+  transaction_fields:
+    - hash
 contracts:
   - name: DelegationManager
     abi_file_path: ./abis/delegation-manager.json

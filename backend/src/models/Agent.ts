@@ -68,14 +68,22 @@ export interface ExecutionLog {
 // Main Agent document interface
 export interface IAgent extends Document {
   // Identification
-  userAddress: string; // User's wallet address
+  userAddress: string; // User's wallet address (delegator)
   agentType: AgentType;
   name: string; // User-friendly name
 
   // Permission data from MetaMask delegation
   permissionContext: string; // The delegation context (hex)
   delegationManager: string; // Delegation manager contract address
-  sessionKeyAddress: string; // The session key that can execute
+  sessionKeyAddress: string; // The session key that can execute (delegate)
+
+  // Permission metadata for correlation with on-chain data
+  // Composite key: delegate + delegator + spendingToken + spendingPeriod + startTime
+  chainId: number; // Chain ID where permission was granted
+  spendingToken: string; // Token address that can be spent
+  spendingLimit: string; // Max amount per period (in wei)
+  spendingPeriod: number; // Period duration in seconds
+  startTime: number; // Unix timestamp when permission started
 
   // Configuration
   config: AgentConfig;
@@ -189,6 +197,31 @@ const AgentSchema = new Schema<IAgent>(
       lowercase: true
     },
 
+    // Permission metadata for on-chain correlation
+    chainId: {
+      type: Number,
+      required: true,
+      index: true
+    },
+    spendingToken: {
+      type: String,
+      required: true,
+      lowercase: true
+    },
+    spendingLimit: {
+      type: String,
+      required: true
+    },
+    spendingPeriod: {
+      type: Number,
+      required: true
+    },
+    startTime: {
+      type: Number,
+      required: true,
+      index: true
+    },
+
     // Configuration
     config: {
       type: AgentConfigSchema,
@@ -233,5 +266,15 @@ AgentSchema.index({ status: 1, nextExecution: 1 });
 
 // Index for user queries
 AgentSchema.index({ userAddress: 1, status: 1 });
+
+// Index for on-chain correlation (matching with Envio indexer data)
+// Composite key: delegate + delegator + spendingToken + spendingPeriod + startTime
+AgentSchema.index({
+  sessionKeyAddress: 1,
+  userAddress: 1,
+  spendingToken: 1,
+  spendingPeriod: 1,
+  startTime: 1
+});
 
 export const Agent = mongoose.model<IAgent>("Agent", AgentSchema);

@@ -12,6 +12,9 @@ import {
 import { privateKeyToAccount } from "viem/accounts";
 import { CHAIN, ERC20_ABI, BACKEND_URL, UNISWAP, SWAP_ROUTER_ABI, QUOTER_V2_ABI } from "./config.js";
 
+// RPC URL from environment or default to public Sepolia RPC
+const RPC_URL = process.env.RPC_URL || "https://ethereum-sepolia-rpc.publicnode.com";
+
 // ============================================
 // Types
 // ============================================
@@ -156,7 +159,7 @@ export async function checkPriceTarget(agent: LimitOrderAgent): Promise<PriceChe
 
   const publicClient = createPublicClient({
     chain: CHAIN,
-    transport: http("https://eth-sepolia.g.alchemy.com/v2/Ofk6JzIo12fA2DpAck3Zq"),
+    transport: http(RPC_URL),
   });
 
   const { tokenIn, tokenOut, targetPrice, direction, feeTier, expiryTimestamp } = agent.config.limitOrder;
@@ -226,12 +229,12 @@ export async function executeLimitOrder(agent: LimitOrderAgent): Promise<Executi
     const walletClient = createWalletClient({
       account: sessionAccount,
       chain: CHAIN,
-      transport: http("https://eth-sepolia.g.alchemy.com/v2/Ofk6JzIo12fA2DpAck3Zq"),
+      transport: http(RPC_URL),
     });
 
     const publicClient = createPublicClient({
       chain: CHAIN,
-      transport: http("https://eth-sepolia.g.alchemy.com/v2/Ofk6JzIo12fA2DpAck3Zq"),
+      transport: http(RPC_URL),
     });
 
     const { tokenIn, tokenOut, amountIn, feeTier } = agent.config.limitOrder;

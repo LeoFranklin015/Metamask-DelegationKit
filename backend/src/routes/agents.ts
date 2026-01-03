@@ -1,5 +1,6 @@
 import { Router, Request, Response } from "express";
 import { Agent, AgentStatus } from "../models/Agent.js";
+import { buildOnChainDataMap, createDelegationKey } from "../services/envio.js";
 
 const router = Router();
 
@@ -13,6 +14,12 @@ interface CreateDCAAgentBody {
   permissionContext: string;
   delegationManager: string;
   sessionKeyAddress: string;
+  // Permission metadata for on-chain correlation
+  chainId: number;
+  spendingToken: string;
+  spendingLimit: string;
+  spendingPeriod: number;
+  startTime: number;
   config: {
     tokenIn: string;
     tokenOut: string;
@@ -30,6 +37,12 @@ interface CreateLimitOrderAgentBody {
   permissionContext: string;
   delegationManager: string;
   sessionKeyAddress: string;
+  // Permission metadata for on-chain correlation
+  chainId: number;
+  spendingToken: string;
+  spendingLimit: string;
+  spendingPeriod: number;
+  startTime: number;
   config: {
     tokenIn: string;
     tokenOut: string;
@@ -47,6 +60,12 @@ interface CreateSavingsAgentBody {
   permissionContext: string;
   delegationManager: string;
   sessionKeyAddress: string;
+  // Permission metadata for on-chain correlation
+  chainId: number;
+  spendingToken: string;
+  spendingLimit: string;
+  spendingPeriod: number;
+  startTime: number;
   config: {
     token: string;
     amountPerExecution: string;
@@ -61,6 +80,12 @@ interface CreateRecurringPaymentAgentBody {
   permissionContext: string;
   delegationManager: string;
   sessionKeyAddress: string;
+  // Permission metadata for on-chain correlation
+  chainId: number;
+  spendingToken: string;
+  spendingLimit: string;
+  spendingPeriod: number;
+  startTime: number;
   config: {
     token: string;
     amount: string;
@@ -106,6 +131,128 @@ router.get("/", async (req: Request, res: Response) => {
     res.status(500).json({
       success: false,
       error: "Failed to fetch agents",
+    });
+  }
+});
+
+// ============================================
+// GET /agents/user/:address - Get all permissions for a user (optimized for dashboard)
+// Returns enriched data with on-chain redemption counts from Envio
+// ============================================
+router.get("/user/:address", async (req: Request, res: Response) => {
+  try {
+    const userAddress = req.params.address.toLowerCase();
+
+    // Fetch agents from MongoDB
+    const agents = await Agent.find({
+      userAddress,
+      status: { $in: ["active", "paused"] }, // Only active and paused
+    })
+      .sort({ createdAt: -1 })
+      .select("-executionLogs -permissionContext"); // Exclude large fields
+
+    // Filter out agents without permission metadata (legacy agents)
+    const validAgents = agents.filter(agent =>
+      agent.spendingPeriod && agent.spendingLimit && agent.spendingToken
+    );
+
+    // Fetch on-chain redemption data from Envio (single request for all agents)
+    let onChainDataMap: Map<string, { redemptionCount: number; totalSpent: bigint; lastRedemptionAt: number | null; lastTxHash: string | null }> = new Map();
+    try {
+      onChainDataMap = await buildOnChainDataMap(userAddress);
+      console.log(`Fetched ${onChainDataMap.size} on-chain delegations from Envio for ${userAddress}`);
+    } catch (error) {
+      console.error("Failed to fetch on-chain data from Envio:", error);
+      // Continue with empty map - will use off-chain data as fallback
+    }
+
+    // Calculate monthly limit for each agent
+    const SECONDS_PER_MONTH = 30 * 24 * 60 * 60; // 2592000
+
+    const permissions = validAgents.map((agent) => {
+      // Calculate how many executions per month
+      const executionsPerMonth = SECONDS_PER_MONTH / agent.spendingPeriod;
+      // Monthly limit = limit per period * executions per month
+      const monthlyLimit = BigInt(agent.spendingLimit) * BigInt(Math.floor(executionsPerMonth));
+
+      // Try to get on-chain data using composite key
+      const delegationKey = createDelegationKey({
+        chainId: agent.chainId,
+        delegate: agent.sessionKeyAddress, // delegate is the session key
+        delegator: userAddress,
+        spendingToken: agent.spendingToken,
+        spendingPeriod: agent.spendingPeriod,
+        startTime: agent.startTime,
+      });
+
+      const onChainData = onChainDataMap.get(delegationKey);
+
+      // Use on-chain data if available, otherwise fall back to off-chain tracking
+      let spent = BigInt(0);
+      let onChainRedemptionCount = 0;
+      let lastOnChainExecution: number | null = null;
+      let lastTxHash: string | null = null;
+
+      if (onChainData) {
+        // Use on-chain data (source of truth)
+        spent = onChainData.totalSpent;
+        onChainRedemptionCount = onChainData.redemptionCount;
+        lastOnChainExecution = onChainData.lastRedemptionAt;
+        lastTxHash = onChainData.lastTxHash;
+      } else {
+        // Fallback to off-chain tracking
+        if (agent.agentType === "dca" && agent.config.dca) {
+          spent = BigInt(agent.config.dca.amountPerExecution) * BigInt(agent.executionCount);
+        } else if (agent.agentType === "savings" && agent.config.savings) {
+          spent = BigInt(agent.config.savings.totalSupplied || "0");
+        } else if (agent.agentType === "recurring-payment" && agent.config.recurringPayment) {
+          spent = BigInt(agent.config.recurringPayment.totalPaid || "0");
+        } else if (agent.agentType === "limit-order" && agent.config.limitOrder) {
+          spent = agent.executionCount > 0 ? BigInt(agent.config.limitOrder.amountIn) : BigInt(0);
+        }
+      }
+
+      return {
+        id: agent._id,
+        name: agent.name,
+        agentType: agent.agentType,
+        status: agent.status,
+        // Permission data for on-chain correlation
+        chainId: agent.chainId,
+        spendingToken: agent.spendingToken,
+        spendingLimit: agent.spendingLimit,
+        spendingPeriod: agent.spendingPeriod,
+        startTime: agent.startTime,
+        sessionKeyAddress: agent.sessionKeyAddress,
+        // Calculated values
+        monthlyLimit: monthlyLimit.toString(),
+        spent: spent.toString(),
+        // Execution info (prefer on-chain data)
+        executionCount: onChainData ? onChainRedemptionCount : agent.executionCount,
+        onChainRedemptionCount,
+        lastExecution: lastOnChainExecution
+          ? new Date(lastOnChainExecution * 1000).toISOString()
+          : agent.lastExecution,
+        lastTxHash,
+        nextExecution: agent.nextExecution,
+        // Data source indicator
+        dataSource: onChainData ? "on-chain" : "off-chain",
+        // Config summary
+        config: agent.config,
+        createdAt: agent.createdAt,
+      };
+    });
+
+    res.json({
+      success: true,
+      count: permissions.length,
+      permissions,
+    });
+  } catch (error) {
+    console.error("Error fetching user permissions:", error);
+    res.status(500).json({
+      success: false,
+      error: "Failed to fetch user permissions",
     });
   }
 });
@@ -181,6 +328,15 @@ router.post("/dca", async (req: Request, res: Response) => {
       return;
     }
 
+    // Validate permission metadata
+    if (!body.chainId || !body.spendingToken || !body.spendingLimit || !body.spendingPeriod || !body.startTime) {
+      res.status(400).json({
+        success: false,
+        error: "Missing required permission metadata: chainId, spendingToken, spendingLimit, spendingPeriod, startTime",
+      });
+      return;
+    }
+
     if (!body.config || !body.config.tokenIn || !body.config.tokenOut || !body.config.amountPerExecution) {
       res.status(400).json({
         success: false,
@@ -197,9 +353,8 @@ router.post("/dca", async (req: Request, res: Response) => {
       return;
     }
 
-    // Calculate first execution time based on interval
-    const intervalMs = body.config.intervalSeconds * 1000;
-    const nextExecution = new Date(Date.now() + intervalMs);
+    // Set first execution to now (ready to execute immediately)
+    const nextExecution = new Date();
 
     const agent = new Agent({
       userAddress: body.userAddress.toLowerCase(),
@@ -208,6 +363,12 @@ router.post("/dca", async (req: Request, res: Response) => {
       permissionContext: body.permissionContext,
       delegationManager: body.delegationManager,
       sessionKeyAddress: body.sessionKeyAddress.toLowerCase(),
+      // Permission metadata
+      chainId: body.chainId,
+      spendingToken: body.spendingToken.toLowerCase(),
+      spendingLimit: body.spendingLimit,
+      spendingPeriod: body.spendingPeriod,
+      startTime: body.startTime,
       config: {
         dca: {
           tokenIn: body.config.tokenIn,
@@ -266,6 +427,15 @@ router.post("/limit-order", async (req: Request, res: Response) => {
       return;
     }
 
+    // Validate permission metadata
+    if (!body.chainId || !body.spendingToken || !body.spendingLimit || !body.spendingPeriod || !body.startTime) {
+      res.status(400).json({
+        success: false,
+        error: "Missing required permission metadata: chainId, spendingToken, spendingLimit, spendingPeriod, startTime",
+      });
+      return;
+    }
+
     if (!body.config || !body.config.tokenIn || !body.config.tokenOut || !body.config.amountIn || !body.config.targetPrice) {
       res.status(400).json({
         success: false,
@@ -292,6 +462,12 @@ router.post("/limit-order", async (req: Request, res: Response) => {
       permissionContext: body.permissionContext,
       delegationManager: body.delegationManager,
       sessionKeyAddress: body.sessionKeyAddress.toLowerCase(),
+      // Permission metadata
+      chainId: body.chainId,
+      spendingToken: body.spendingToken.toLowerCase(),
+      spendingLimit: body.spendingLimit,
+      spendingPeriod: body.spendingPeriod,
+      startTime: body.startTime,
       config: {
         limitOrder: {
           tokenIn: body.config.tokenIn,
@@ -352,6 +528,15 @@ router.post("/savings", async (req: Request, res: Response) => {
       return;
     }
 
+    // Validate permission metadata
+    if (!body.chainId || !body.spendingToken || !body.spendingLimit || !body.spendingPeriod || !body.startTime) {
+      res.status(400).json({
+        success: false,
+        error: "Missing required permission metadata: chainId, spendingToken, spendingLimit, spendingPeriod, startTime",
+      });
+      return;
+    }
+
     if (!body.config || !body.config.token || !body.config.amountPerExecution) {
       res.status(400).json({
         success: false,
@@ -368,9 +553,8 @@ router.post("/savings", async (req: Request, res: Response) => {
       return;
     }
 
-    // Calculate first execution time based on interval
-    const intervalMs = body.config.intervalSeconds * 1000;
-    const nextExecution = new Date(Date.now() + intervalMs);
+    // Set first execution to now (ready to execute immediately)
+    const nextExecution = new Date();
 
     const agent = new Agent({
       userAddress: body.userAddress.toLowerCase(),
@@ -379,6 +563,12 @@ router.post("/savings", async (req: Request, res: Response) => {
       permissionContext: body.permissionContext,
       delegationManager: body.delegationManager,
       sessionKeyAddress: body.sessionKeyAddress.toLowerCase(),
+      // Permission metadata
+      chainId: body.chainId,
+      spendingToken: body.spendingToken.toLowerCase(),
+      spendingLimit: body.spendingLimit,
+      spendingPeriod: body.spendingPeriod,
+      startTime: body.startTime,
       config: {
         savings: {
           token: body.config.token,
@@ -437,6 +627,15 @@ router.post("/recurring-payment", async (req: Request, res: Response) => {
       return;
     }
 
+    // Validate permission metadata
+    if (!body.chainId || !body.spendingToken || !body.spendingLimit || !body.spendingPeriod || !body.startTime) {
+      res.status(400).json({
+        success: false,
+        error: "Missing required permission metadata: chainId, spendingToken, spendingLimit, spendingPeriod, startTime",
+      });
+      return;
+    }
+
     if (!body.config || !body.config.token || !body.config.amount || !body.config.recipient) {
       res.status(400).json({
         success: false,
@@ -453,9 +652,8 @@ router.post("/recurring-payment", async (req: Request, res: Response) => {
       return;
     }
 
-    // Calculate first execution time based on interval
-    const intervalMs = body.config.intervalSeconds * 1000;
-    const nextExecution = new Date(Date.now() + intervalMs);
+    // Set first execution to now (ready to execute immediately)
+    const nextExecution = new Date();
 
     const agent = new Agent({
       userAddress: body.userAddress.toLowerCase(),
@@ -464,6 +662,12 @@ router.post("/recurring-payment", async (req: Request, res: Response) => {
       permissionContext: body.permissionContext,
       delegationManager: body.delegationManager,
       sessionKeyAddress: body.sessionKeyAddress.toLowerCase(),
+      // Permission metadata
+      chainId: body.chainId,
+      spendingToken: body.spendingToken.toLowerCase(),
+      spendingLimit: body.spendingLimit,
+      spendingPeriod: body.spendingPeriod,
+      startTime: body.startTime,
       config: {
         recurringPayment: {
           token: body.config.token,

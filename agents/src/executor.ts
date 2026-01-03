@@ -13,6 +13,9 @@ import { CHAIN, ERC20_ABI, BACKEND_URL, UNISWAP, SWAP_ROUTER_ABI } from "./confi
 import dotenv from "dotenv";
 dotenv.config();
 
+// RPC URL from environment or default to public Sepolia RPC
+const RPC_URL = process.env.RPC_URL || "https://ethereum-sepolia-rpc.publicnode.com";
+
 // ============================================
 // Types
 // ============================================
@@ -106,13 +109,13 @@ export async function executeDCASwap(agent: Agent): Promise<ExecutionResult> {
     const walletClient = createWalletClient({
       account: sessionAccount,
       chain: CHAIN,
-      transport: http("https://eth-sepolia.g.alchemy.com/v2/Ofk6JzIo12fA2DpAck3Zq"),
+      transport: http(RPC_URL),
     });
 
     // Public client for reading state
     const publicClient = createPublicClient({
       chain: CHAIN,
-      transport: http("https://eth-sepolia.g.alchemy.com/v2/Ofk6JzIo12fA2DpAck3Zq"),
+      transport: http(RPC_URL),
     });
 
     const { tokenIn, tokenOut, amountPerExecution, feeTier } = agent.config.dca;
