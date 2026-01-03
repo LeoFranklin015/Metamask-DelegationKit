@@ -2,9 +2,11 @@
 
 import { useState } from "react"
 import { DashboardHeader } from "@/components/dashboard/header"
-import { AgentGrid } from "@/components/dashboard/agent-grid"
 import { DelegationTree } from "@/components/dashboard/delegation-tree"
 import { AgentConfigModal } from "@/components/dashboard/agent-config-modal"
+import { StatsOverview } from "@/components/dashboard/stats-overview"
+import { PermissionsList } from "@/components/dashboard/permissions-list"
+import { RecentActivity } from "@/components/dashboard/recent-activity"
 import { AnimatedNoise } from "@/components/animated-noise"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
@@ -20,31 +22,38 @@ export default function DashboardPage() {
 
         <main className="px-6 md:px-28 py-12">
           <Tabs defaultValue="overview" className="w-full">
-            <TabsList className="border-b border-border/50 bg-transparent h-auto gap-8 rounded-none p-0">
-              <TabsTrigger
-                value="overview"
-                className="border-b-2 border-transparent data-[state=active]:border-accent rounded-none px-0 py-3 font-mono text-xs uppercase tracking-widest"
-              >
-                Overview
-              </TabsTrigger>
-              <TabsTrigger
-                value="delegation"
-                className="border-b-2 border-transparent data-[state=active]:border-accent rounded-none px-0 py-3 font-mono text-xs uppercase tracking-widest"
-              >
-                Delegation Map
-              </TabsTrigger>
-            </TabsList>
+            <div className="flex items-center justify-between border-b border-border/50">
+              <TabsList className="bg-transparent h-auto gap-8 rounded-none p-0">
+                <TabsTrigger
+                  value="overview"
+                  className="border-b-2 border-transparent data-[state=active]:border-accent rounded-none px-0 py-3 font-mono text-xs uppercase tracking-widest"
+                >
+                  Overview
+                </TabsTrigger>
+                <TabsTrigger
+                  value="delegation"
+                  className="border-b-2 border-transparent data-[state=active]:border-accent rounded-none px-0 py-3 font-mono text-xs uppercase tracking-widest"
+                >
+                  Delegation Map
+                </TabsTrigger>
+              </TabsList>
 
-            <TabsContent value="overview" className="mt-12 space-y-8">
+              <button className="bg-accent text-background px-4 py-2 font-mono text-xs uppercase tracking-widest hover:bg-accent/90 transition-colors">
+                New Permission +
+              </button>
+            </div>
+
+            <TabsContent value="overview" className="mt-12 space-y-10">
+              <StatsOverview />
+
               <div>
-                <h2 className="font-[var(--font-bebas)] text-3xl md:text-4xl tracking-tight mb-6">Active Agents</h2>
-                <AgentGrid
-                  onSelectAgent={(id) => {
-                    setSelectedAgent(id)
-                    setIsConfigOpen(true)
-                  }}
-                />
+                <h2 className="font-[var(--font-bebas)] text-3xl md:text-4xl tracking-tight mb-6">
+                  Active Permissions
+                </h2>
+                <PermissionsList />
               </div>
+
+              <RecentActivity />
             </TabsContent>
 
             <TabsContent value="delegation" className="mt-12">
@@ -56,6 +65,7 @@ export default function DashboardPage() {
               </div>
             </TabsContent>
           </Tabs>
+       
         </main>
 
         <AgentConfigModal
