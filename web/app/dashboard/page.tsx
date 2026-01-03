@@ -7,6 +7,7 @@ import { NewPermissionModal } from "@/components/dashboard/new-permission-modal"
 import { DCAConfigModal } from "@/components/dashboard/dca-config-modal"
 import { LimitOrderConfigModal } from "@/components/dashboard/limit-order-config-modal"
 import { SavingsConfigModal } from "@/components/dashboard/savings-config-modal"
+import { SubscriptionConfigModal } from "@/components/dashboard/subscription-config-modal"
 import { StatsOverview } from "@/components/dashboard/stats-overview"
 import { PermissionsList } from "@/components/dashboard/permissions-list"
 import { RecentActivity } from "@/components/dashboard/recent-activity"
@@ -19,6 +20,7 @@ export default function DashboardPage() {
   const [isDCAConfigOpen, setIsDCAConfigOpen] = useState(false)
   const [isLimitOrderConfigOpen, setIsLimitOrderConfigOpen] = useState(false)
   const [isSavingsConfigOpen, setIsSavingsConfigOpen] = useState(false)
+  const [isSubscriptionConfigOpen, setIsSubscriptionConfigOpen] = useState(false)
 
   return (
     <WalletGate>
@@ -90,8 +92,9 @@ export default function DashboardPage() {
               setIsLimitOrderConfigOpen(true)
             } else if (agentId === "savings") {
               setIsSavingsConfigOpen(true)
+            } else if (agentId === "subscription") {
+              setIsSubscriptionConfigOpen(true)
             }
-            // TODO: Add subscription agent modal
           }}
         />
 
@@ -108,6 +111,11 @@ export default function DashboardPage() {
         <SavingsConfigModal
           isOpen={isSavingsConfigOpen}
           onClose={() => setIsSavingsConfigOpen(false)}
+        />
+
+        <SubscriptionConfigModal
+          isOpen={isSubscriptionConfigOpen}
+          onClose={() => setIsSubscriptionConfigOpen(false)}
         />
       </div>
     </div>
