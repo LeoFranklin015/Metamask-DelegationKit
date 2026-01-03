@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from "react"
 import { useAccount } from "wagmi"
 import { formatUnits } from "viem"
 import { cn } from "@/lib/utils"
+import { PermissionDetailModal, type Permission } from "./permission-detail-modal"
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:3001"
 
@@ -22,48 +23,6 @@ const AGENT_TYPE_LABELS: Record<string, string> = {
   "limit-order": "Limit Order Agent",
   "savings": "Savings Agent",
   "recurring-payment": "Subscription Agent",
-}
-
-interface PermissionConfig {
-  dca?: {
-    tokenIn: string
-    tokenOut: string
-    amountPerExecution: string
-    intervalSeconds: number
-  }
-  limitOrder?: {
-    tokenIn: string
-    tokenOut: string
-    amountIn: string
-    targetPrice: string
-    direction: string
-  }
-  savings?: {
-    token: string
-    amountPerExecution: string
-  }
-  recurringPayment?: {
-    token: string
-    amount: string
-    recipient: string
-  }
-}
-
-interface Permission {
-  id: string
-  name: string
-  agentType: string
-  status: "active" | "paused" | "expired"
-  spendingToken: string
-  monthlyLimit: string
-  spent: string
-  lastExecution: string | null
-  lastTxHash: string | null
-  executionCount: number
-  onChainRedemptionCount: number
-  dataSource: "on-chain" | "off-chain"
-  chainId: number
-  config: PermissionConfig
 }
 
 // Helper to get token info
@@ -116,7 +75,15 @@ function getPermissionDescription(permission: Permission): string {
   return permission.name
 }
 
-function PermissionRow({ permission, index }: { permission: Permission; index: number }) {
+function PermissionRow({
+  permission,
+  index,
+  onClick
+}: {
+  permission: Permission
+  index: number
+  onClick: () => void
+}) {
   const [mounted, setMounted] = useState(false)
   const tokenInfo = getTokenInfo(permission.spendingToken)
 
@@ -135,8 +102,9 @@ function PermissionRow({ permission, index }: { permission: Permission; index: n
 
   return (
     <div
+      onClick={onClick}
       className={cn(
-        "group border border-border/50 bg-background/50 p-5 transition-all duration-300 hover:border-accent/50 hover:bg-accent/5",
+        "group border border-border/50 bg-background/50 p-5 transition-all duration-300 hover:border-accent/50 hover:bg-accent/5 cursor-pointer",
         mounted ? "opacity-100 translate-y-0" : "opacity-0 translate-y-2"
       )}
     >
@@ -169,7 +137,7 @@ function PermissionRow({ permission, index }: { permission: Permission; index: n
       <div className="mt-4">
         <div className="flex items-center justify-between mb-2">
           <span className="font-mono text-[10px] text-muted-foreground">
-            {spent.toLocaleString(undefined, { maximumFractionDigits: 4 })} / {limit.toLocaleString(undefined, { maximumFractionDigits: 4 })} {tokenInfo.symbol}
+            {spent.toLocaleString(undefined, { maximumFractionDigits: 18 })} / {limit.toLocaleString(undefined, { maximumFractionDigits: 18 })} {tokenInfo.symbol}
           </span>
           <span className="font-mono text-[10px] text-muted-foreground">
             {progress.toFixed(0)}%
@@ -258,6 +226,8 @@ export function PermissionsList() {
   const [permissions, setPermissions] = useState<Permission[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [selectedPermission, setSelectedPermission] = useState<Permission | null>(null)
+  const [isModalOpen, setIsModalOpen] = useState(false)
 
   const fetchPermissions = useCallback(async () => {
     if (!address) {
@@ -323,11 +293,40 @@ export function PermissionsList() {
     return <EmptyState />
   }
 
+  const handlePermissionClick = (permission: Permission) => {
+    setSelectedPermission(permission)
+    setIsModalOpen(true)
+  }
+
+  const handleModalClose = () => {
+    setIsModalOpen(false)
+    setSelectedPermission(null)
+  }
+
+  const handlePermissionCancelled = () => {
+    // Refresh the permissions list after cancellation
+    fetchPermissions()
+  }
+
   return (
-    <div className="space-y-3">
-      {permissions.map((permission, index) => (
-        <PermissionRow key={permission.id} permission={permission} index={index} />
-      ))}
-    </div>
+    <>
+      <div className="space-y-3">
+        {permissions.map((permission, index) => (
+          <PermissionRow
+            key={permission.id}
+            permission={permission}
+            index={index}
+            onClick={() => handlePermissionClick(permission)}
+          />
+        ))}
+      </div>
+
+      <PermissionDetailModal
+        isOpen={isModalOpen}
+        onClose={handleModalClose}
+        permission={selectedPermission}
+        onCancelled={handlePermissionCancelled}
+      />
+    </>
   )
 }

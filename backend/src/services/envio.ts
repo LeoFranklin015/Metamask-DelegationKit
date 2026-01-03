@@ -5,7 +5,7 @@
 
 // Envio GraphQL endpoint - hosted indexer
 const ENVIO_GRAPHQL_URL =
-  process.env.ENVIO_GRAPHQL_URL || "https://indexer.dev.hyperindex.xyz/871690b/v1/graphql";
+  process.env.ENVIO_GRAPHQL_URL || "https://indexer.dev.hyperindex.xyz/dca02a0/v1/graphql";
 
 interface EnvioRedemption {
   id: string;
