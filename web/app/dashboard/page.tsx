@@ -6,6 +6,7 @@ import { DelegationTree } from "@/components/dashboard/delegation-tree"
 import { NewPermissionModal } from "@/components/dashboard/new-permission-modal"
 import { DCAConfigModal } from "@/components/dashboard/dca-config-modal"
 import { LimitOrderConfigModal } from "@/components/dashboard/limit-order-config-modal"
+import { SavingsConfigModal } from "@/components/dashboard/savings-config-modal"
 import { StatsOverview } from "@/components/dashboard/stats-overview"
 import { PermissionsList } from "@/components/dashboard/permissions-list"
 import { RecentActivity } from "@/components/dashboard/recent-activity"
@@ -17,6 +18,7 @@ export default function DashboardPage() {
   const [isNewPermissionOpen, setIsNewPermissionOpen] = useState(false)
   const [isDCAConfigOpen, setIsDCAConfigOpen] = useState(false)
   const [isLimitOrderConfigOpen, setIsLimitOrderConfigOpen] = useState(false)
+  const [isSavingsConfigOpen, setIsSavingsConfigOpen] = useState(false)
 
   return (
     <WalletGate>
@@ -74,7 +76,7 @@ export default function DashboardPage() {
             </TabsContent>
           </Tabs>
        
-        </main>Ok
+        </main>
 
         <NewPermissionModal
           isOpen={isNewPermissionOpen}
@@ -86,8 +88,10 @@ export default function DashboardPage() {
               setIsDCAConfigOpen(true)
             } else if (agentId === "limit-order") {
               setIsLimitOrderConfigOpen(true)
+            } else if (agentId === "savings") {
+              setIsSavingsConfigOpen(true)
             }
-            // TODO: Add other agent modals (subscription, savings)
+            // TODO: Add subscription agent modal
           }}
         />
 
@@ -99,6 +103,11 @@ export default function DashboardPage() {
         <LimitOrderConfigModal
           isOpen={isLimitOrderConfigOpen}
           onClose={() => setIsLimitOrderConfigOpen(false)}
+        />
+
+        <SavingsConfigModal
+          isOpen={isSavingsConfigOpen}
+          onClose={() => setIsSavingsConfigOpen(false)}
         />
       </div>
     </div>
