@@ -63,9 +63,8 @@ export interface EnvioRedemption {
   redeemer: string
   spendingToken: string | null
   spendingLimit: string | null
-  executedToken: string | null
-  executedAmount: string | null
-  executedRecipient: string | null
+  spendingPeriod?: string | null
+  spendingStartDate?: string | null
   timestamp: string
   txHash: string
 }
@@ -139,9 +138,6 @@ export async function fetchRedemptions(delegatorAddress: string, limit: number =
         redeemer
         spendingToken
         spendingLimit
-        executedToken
-        executedAmount
-        executedRecipient
         timestamp
         txHash
       }
@@ -191,9 +187,6 @@ export async function fetchRedemptionsByRedeemer(redeemerAddress: string, limit:
         redeemer
         spendingToken
         spendingLimit
-        executedToken
-        executedAmount
-        executedRecipient
         timestamp
         txHash
       }
@@ -264,9 +257,6 @@ export async function fetchRedemptionsForPermission(params: {
         spendingLimit
         spendingPeriod
         spendingStartDate
-        executedToken
-        executedAmount
-        executedRecipient
         timestamp
         txHash
       }
@@ -307,15 +297,13 @@ export async function fetchRedemptionsForPermission(params: {
 
 // Transform Envio redemption to Activity
 export function transformToActivity(redemption: EnvioRedemption): Activity {
-  // Prefer executed token/amount (decoded from calldata) over spending limit
-  const tokenAddress = redemption.executedToken || redemption.spendingToken
+  const tokenAddress = redemption.spendingToken
   const tokenInfo = getTokenInfo(tokenAddress)
   const chainInfo = getChainInfo(redemption.chainId)
   const agentInfo = getAgentInfo(redemption.redeemer)
 
   let amount = ""
-  // Use executedAmount if available (actual amount from tx), otherwise fall back to spendingLimit
-  const amountValue = redemption.executedAmount || redemption.spendingLimit
+  const amountValue = redemption.spendingLimit
   if (amountValue && tokenAddress) {
     const formattedAmount = formatUnits(BigInt(amountValue), tokenInfo.decimals)
     amount = `${Number(formattedAmount).toLocaleString(undefined, { maximumFractionDigits: 18 })} ${tokenInfo.symbol}`
