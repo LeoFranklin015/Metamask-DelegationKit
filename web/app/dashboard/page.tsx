@@ -4,21 +4,25 @@ import { useState } from "react"
 import { DashboardHeader } from "@/components/dashboard/header"
 import { DelegationTree } from "@/components/dashboard/delegation-tree"
 import { AgentConfigModal } from "@/components/dashboard/agent-config-modal"
+import { NewPermissionModal } from "@/components/dashboard/new-permission-modal"
 import { StatsOverview } from "@/components/dashboard/stats-overview"
 import { PermissionsList } from "@/components/dashboard/permissions-list"
 import { RecentActivity } from "@/components/dashboard/recent-activity"
+import { WalletGate } from "@/components/dashboard/wallet-gate"
 import { AnimatedNoise } from "@/components/animated-noise"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
 export default function DashboardPage() {
   const [selectedAgent, setSelectedAgent] = useState<string | null>(null)
   const [isConfigOpen, setIsConfigOpen] = useState(false)
+  const [isNewPermissionOpen, setIsNewPermissionOpen] = useState(false)
 
   return (
-    <div className="relative min-h-screen bg-background">
-      <AnimatedNoise opacity={0.03} />
-      <div className="relative z-10">
-        <DashboardHeader />
+    <WalletGate>
+      <div className="relative min-h-screen bg-background">
+        <AnimatedNoise opacity={0.03} />
+        <div className="relative z-10">
+          <DashboardHeader />
 
         <main className="px-6 md:px-28 py-12">
           <Tabs defaultValue="overview" className="w-full">
@@ -38,7 +42,10 @@ export default function DashboardPage() {
                 </TabsTrigger>
               </TabsList>
 
-              <button className="bg-accent text-background px-4 py-2 font-mono text-xs uppercase tracking-widest hover:bg-accent/90 transition-colors">
+              <button
+                onClick={() => setIsNewPermissionOpen(true)}
+                className="bg-accent text-background px-4 py-2 font-mono text-xs uppercase tracking-widest hover:bg-accent/90 transition-colors"
+              >
                 New Permission +
               </button>
             </div>
@@ -76,7 +83,17 @@ export default function DashboardPage() {
             setSelectedAgent(null)
           }}
         />
+
+        <NewPermissionModal
+          isOpen={isNewPermissionOpen}
+          onClose={() => setIsNewPermissionOpen(false)}
+          onSelectAgent={(agentId) => {
+            setSelectedAgent(agentId)
+            setIsConfigOpen(true)
+          }}
+        />
       </div>
     </div>
+    </WalletGate>
   )
 }
