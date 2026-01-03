@@ -40,7 +40,7 @@ export function HeroSection() {
       {/* Left vertical labels */}
       <div className="absolute left-4 md:left-6 top-1/2 -translate-y-1/2">
         <span className="font-mono text-[10px] uppercase tracking-[0.3em] text-muted-foreground -rotate-90 origin-left block whitespace-nowrap">
-          SIGNAL
+          SpendHQ
         </span>
       </div>
 
@@ -55,12 +55,10 @@ export function HeroSection() {
         </h2>
 
         <p className="mt-12 max-w-md font-mono text-sm text-muted-foreground leading-relaxed">
-          We design systems that behave, not just screens that display. Signals from the edge of what&apos;s shippable.
+          Track spending permissions granted to agents. Monitor limits. View executions. Revoke anytime.
         </p>
 
-        <p className="mt-4 max-w-md font-mono text-xs text-muted-foreground/80 leading-relaxed">
-          Track spending permissions granted to agents. │ Monitor limits. View executions. Revoke anytime.
-        </p>
+
 
         <div className="mt-16 flex items-center gap-8">
           <a
@@ -70,19 +68,14 @@ export function HeroSection() {
             <ScrambleTextOnHover text="Enter Watchtower" as="span" duration={0.6} />
             <BitmapChevron className="transition-transform duration-[400ms] ease-in-out group-hover:rotate-45" />
           </a>
-          <a
-            href="#signals"
-            className="font-mono text-xs uppercase tracking-widest text-muted-foreground hover:text-foreground transition-colors duration-200"
-          >
-            Latest Signals
-          </a>
+
         </div>
       </div>
 
       {/* Floating info tag */}
       <div className="absolute bottom-8 right-8 md:bottom-12 md:right-12">
         <div className="border border-border px-4 py-2 font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
-          v.01 / Experimental Build
+          Metamask Cookoff
         </div>
       </div>
     </section>
