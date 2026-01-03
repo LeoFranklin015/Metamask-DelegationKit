@@ -135,9 +135,8 @@ const FEE_TIER_LABELS: Record<number, string> = {
   10000: "1%",
 }
 
-// Time units for interval selection
+// Time units for interval selection (minutes not supported by MetaMask delegation)
 const TIME_UNITS = [
-  { value: 60, label: "Minutes", short: "min" },
   { value: 3600, label: "Hours", short: "hr" },
   { value: 86400, label: "Days", short: "day" },
   { value: 604800, label: "Weeks", short: "wk" },

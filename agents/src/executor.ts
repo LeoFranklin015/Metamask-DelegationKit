@@ -158,8 +158,13 @@ export async function executeDCASwap(agent: Agent): Promise<ExecutionResult> {
 
     console.log(`   ✅ Transfer TX: ${transferTxHash}`);
 
-    const transferReceipt = await publicClient.waitForTransactionReceipt({ hash: transferTxHash });
+    console.log(`   ⏳ Waiting for transfer confirmation...`);
+    const transferReceipt = await publicClient.waitForTransactionReceipt({
+      hash: transferTxHash,
+      timeout: 60_000, // 60 second timeout
+    });
     if (transferReceipt.status !== "success") {
+      console.log(`   ❌ Transfer failed with status: ${transferReceipt.status}`);
       return {
         success: false,
         txHash: transferTxHash,
@@ -186,7 +191,12 @@ export async function executeDCASwap(agent: Agent): Promise<ExecutionResult> {
     });
 
     console.log(`   ✅ Approve TX: ${approveTxHash}`);
-    await publicClient.waitForTransactionReceipt({ hash: approveTxHash });
+    console.log(`   ⏳ Waiting for approval confirmation...`);
+    const approveReceipt = await publicClient.waitForTransactionReceipt({
+      hash: approveTxHash,
+      timeout: 60_000,
+    });
+    console.log(`   📦 Approval confirmed in block ${approveReceipt.blockNumber}`);
 
     // ============================================
     // Step 3: Execute swap on Uniswap
@@ -236,6 +246,9 @@ export async function executeDCASwap(agent: Agent): Promise<ExecutionResult> {
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     console.error(`   ❌ Execution error: ${errorMessage}`);
+    if (error instanceof Error && error.stack) {
+      console.error(`   Stack: ${error.stack.split('\n').slice(0, 3).join('\n')}`);
+    }
     return {
       success: false,
       error: errorMessage,
