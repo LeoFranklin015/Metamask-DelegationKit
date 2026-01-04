@@ -130,6 +130,88 @@ app.post("/execute", async (req, res) => {
 });
 
 // ============================================
+// Trigger endpoint - check and execute ALL due agents
+// ============================================
+
+app.get("/trigger", async (_req, res) => {
+  console.log("\n" + "=".repeat(60));
+  console.log(`🚀 Agent Trigger - ${new Date().toISOString()}`);
+  console.log("=".repeat(60));
+
+  try {
+    // Fetch all due agents from backend
+    const dueResponse = await fetch(`${BACKEND_URL}/api/agents/due`);
+    const dueData = await dueResponse.json();
+
+    if (!dueData.success) {
+      res.status(500).json({ success: false, error: "Failed to fetch due agents" });
+      return;
+    }
+
+    const dueAgents = dueData.agents;
+    console.log(`\n📋 Found ${dueAgents.length} agents due for execution`);
+
+    if (dueAgents.length === 0) {
+      res.json({ success: true, message: "No agents due for execution", results: { success: 0, failed: 0, skipped: 0 } });
+      return;
+    }
+
+    const results = {
+      success: 0,
+      failed: 0,
+      skipped: 0,
+      details: [] as Array<{ agentId: string; name: string; type: string; status: string; txHash?: string; error?: string }>,
+    };
+
+    // Process each agent
+    for (const dueAgent of dueAgents) {
+      console.log(`\n📦 Processing: ${dueAgent.name} (${dueAgent.agentType})`);
+
+      try {
+        const result = await executeAgent(dueAgent._id, dueAgent.agentType);
+
+        if (result.success) {
+          results.success++;
+          const txHash = "txHash" in result ? result.txHash : undefined;
+          results.details.push({ agentId: dueAgent._id, name: dueAgent.name, type: dueAgent.agentType, status: "success", txHash });
+          console.log(`   ✅ Success! TX: ${txHash}`);
+        } else {
+          // Check if it was skipped (e.g., price target not met)
+          if (result.error?.includes("Price target not met")) {
+            results.skipped++;
+            results.details.push({ agentId: dueAgent._id, name: dueAgent.name, type: dueAgent.agentType, status: "skipped", error: result.error });
+            console.log(`   ⏳ Skipped: ${result.error}`);
+          } else {
+            results.failed++;
+            results.details.push({ agentId: dueAgent._id, name: dueAgent.name, type: dueAgent.agentType, status: "failed", error: result.error });
+            console.log(`   ❌ Failed: ${result.error}`);
+          }
+        }
+      } catch (error) {
+        results.failed++;
+        const errorMsg = error instanceof Error ? error.message : "Unknown error";
+        results.details.push({ agentId: dueAgent._id, name: dueAgent.name, type: dueAgent.agentType, status: "failed", error: errorMsg });
+        console.error(`   ❌ Error: ${errorMsg}`);
+      }
+    }
+
+    console.log(`\n📊 Summary: ✅ ${results.success} | ❌ ${results.failed} | ⏳ ${results.skipped}`);
+
+    res.json({
+      success: true,
+      message: `Processed ${dueAgents.length} agents`,
+      results,
+    });
+  } catch (error) {
+    console.error("Trigger error:", error);
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : "Trigger failed",
+    });
+  }
+});
+
+// ============================================
 // Start server
 // ============================================
 
@@ -138,4 +220,5 @@ app.listen(PORT, () => {
   console.log(`   Backend URL: ${BACKEND_URL}`);
   console.log(`   Health check: http://localhost:${PORT}/health`);
   console.log(`   Execute: POST http://localhost:${PORT}/execute`);
+  console.log(`   Trigger All: POST http://localhost:${PORT}/trigger`);
 });
