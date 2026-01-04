@@ -2,8 +2,8 @@
 
 import { useState, useCallback, useEffect } from "react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { useAccount, useWalletClient, useSwitchChain, useChainId, useBalance } from "wagmi"
-import { parseUnits, formatUnits, type Address, type Hex } from "viem"
+import { useAccount, useWalletClient, useSwitchChain, useChainId, useReadContract } from "wagmi"
+import { parseUnits, formatUnits, type Address, type Hex, erc20Abi } from "viem"
 import {
   requestExecutionPermissions,
   type RequestExecutionPermissionsParameters,
@@ -90,11 +90,14 @@ export function SavingsConfigModal({ isOpen, onClose, onSuccess }: SavingsConfig
 
   // Get token balance
   const tokenData = AAVE_SUPPORTED_TOKENS[token]
-  const { data: tokenBalance, isLoading: isBalanceLoading } = useBalance({
-    address,
-    token: tokenData.address,
+  const { data: erc20Balance, isLoading: isBalanceLoading } = useReadContract({
+    address: tokenData.address,
+    abi: erc20Abi,
+    functionName: "balanceOf",
+    args: address ? [address] : undefined,
     chainId: baseSepolia.id,
   })
+  const tokenBalance = { value: erc20Balance || 0n, decimals: tokenData.decimals, symbol: tokenData.symbol }
 
   // UI state
   const [isLoading, setIsLoading] = useState(false)

@@ -1,7 +1,7 @@
 "use client";
 
 import { ConnectButton } from '@rainbow-me/rainbowkit'
-import { createWalletClient, custom, http, parseUnits, type Address, encodeFunctionData, erc20Abi } from "viem";
+import { createWalletClient, custom, parseUnits, type Address, encodeFunctionData, erc20Abi } from "viem";
 import { erc7715ProviderActions } from "@metamask/smart-accounts-kit/actions";
 import { erc7710WalletActions } from "@metamask/smart-accounts-kit/actions";
 import { sepolia as chain } from "viem/chains";
@@ -16,7 +16,8 @@ const context = "0x0000000000000000000000000000000000000000000000000000000000000
 const delegator ="0xdb9B1e94B5b69Df7e401DDbedE43491141047dB3"
 const requestPermissions = async () => {
 const walletClient = createWalletClient({
-        transport: custom(window.ethereum),
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        transport: custom((window as any).ethereum),
       }).extend(erc7715ProviderActions());
 const currentTime = Math.floor(Date.now() / 1000);
 // 1 week from now.
@@ -55,7 +56,8 @@ const redeemPermissions = async () => {
  const sessionAccountWalletClient = createWalletClient({
         account: delegator,
         chain,
-        transport: custom(window.ethereum),
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        transport: custom((window as any).ethereum),
       }).extend(erc7710WalletActions());
 
  const calldata = encodeFunctionData({

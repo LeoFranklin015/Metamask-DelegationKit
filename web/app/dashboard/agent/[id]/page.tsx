@@ -531,7 +531,7 @@ export default function AgentStatsPage() {
                           fontSize: "12px",
                         }}
                         labelStyle={{ color: "hsl(var(--foreground))" }}
-                        formatter={(value: number | undefined) => [`${value ?? 0} executions`, "Activity"]}
+                        formatter={(value) => [`${value ?? 0} executions`, "Activity"]}
                         labelFormatter={(label: string, payload) => {
                           if (payload && payload[0]) {
                             return payload[0].payload.date

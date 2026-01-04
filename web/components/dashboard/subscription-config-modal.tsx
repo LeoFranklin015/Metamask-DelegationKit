@@ -2,8 +2,8 @@
 
 import { useState, useCallback, useEffect } from "react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { useAccount, useWalletClient, useSwitchChain, useChainId, useBalance } from "wagmi"
-import { parseUnits, formatUnits, type Address, type Hex } from "viem"
+import { useAccount, useWalletClient, useSwitchChain, useChainId, useReadContract } from "wagmi"
+import { parseUnits, formatUnits, type Address, type Hex, erc20Abi } from "viem"
 import {
   requestExecutionPermissions,
   type RequestExecutionPermissionsParameters,
@@ -149,11 +149,14 @@ export function SubscriptionConfigModal({ isOpen, onClose, onSuccess }: Subscrip
   }, [address])
 
   // Get USDC balance
-  const { data: usdcBalance, isLoading: isBalanceLoading } = useBalance({
-    address,
-    token: USDC.address,
+  const { data: erc20Balance, isLoading: isBalanceLoading } = useReadContract({
+    address: USDC.address,
+    abi: erc20Abi,
+    functionName: "balanceOf",
+    args: address ? [address] : undefined,
     chainId: sepolia.id,
   })
+  const usdcBalance = { value: erc20Balance || 0n, decimals: USDC.decimals, symbol: USDC.symbol }
 
   // UI state
   const [isLoading, setIsLoading] = useState(false)

@@ -2,8 +2,8 @@
 
 import { useState, useCallback, useEffect } from "react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { useAccount, useWalletClient, useSwitchChain, useChainId, useBalance } from "wagmi"
-import { parseUnits, formatUnits, type Address, type Hex } from "viem"
+import { useAccount, useWalletClient, useSwitchChain, useChainId, useBalance, useReadContract } from "wagmi"
+import { parseUnits, formatUnits, type Address, type Hex, erc20Abi } from "viem"
 import {
   requestExecutionPermissions,
   type RequestExecutionPermissionsParameters,
@@ -181,11 +181,23 @@ export function LimitOrderConfigModal({ isOpen, onClose, onSuccess }: LimitOrder
 
   // Get token balance
   const tokenInData = TOKENS[tokenIn]
-  const { data: tokenBalance, isLoading: isBalanceLoading } = useBalance({
+  // Native ETH balance
+  const { data: ethBalance, isLoading: isEthBalanceLoading } = useBalance({
     address,
-    token: tokenInData.address || undefined,
     chainId: sepolia.id,
   })
+  // ERC20 token balance
+  const { data: erc20Balance, isLoading: isErc20BalanceLoading } = useReadContract({
+    address: tokenInData.address || undefined,
+    abi: erc20Abi,
+    functionName: "balanceOf",
+    args: address ? [address] : undefined,
+    chainId: sepolia.id,
+  })
+  const tokenBalance = tokenInData.address
+    ? { value: erc20Balance || 0n, decimals: tokenInData.decimals, symbol: tokenInData.symbol }
+    : ethBalance
+  const isBalanceLoading = tokenInData.address ? isErc20BalanceLoading : isEthBalanceLoading
 
   // Pool status
   const [poolStatus, setPoolStatus] = useState<"active" | "no-pool" | null>(null)
