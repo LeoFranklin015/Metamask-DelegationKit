@@ -966,7 +966,7 @@ router.post("/:id/execute", async (req: Request, res: Response) => {
       const errorData = await executeResponse.json().catch(() => ({}));
       res.status(500).json({
         success: false,
-        error: errorData.error || "Failed to trigger agent execution",
+        error: (errorData as { error?: string }).error || "Failed to trigger agent execution",
       });
       return;
     }
