@@ -57,14 +57,7 @@ export default function DashboardPage() {
 
             <TabsContent value="overview" className="mt-12 space-y-10">
               <StatsOverview />
-
-              <div>
-                <h2 className="font-[var(--font-bebas)] text-3xl md:text-4xl tracking-tight mb-6">
-                  Permissions
-                </h2>
-                <PermissionsList />
-              </div>
-
+              <PermissionsList />
               <RecentActivity />
             </TabsContent>
 

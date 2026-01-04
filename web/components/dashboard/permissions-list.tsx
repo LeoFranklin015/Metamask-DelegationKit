@@ -4,12 +4,13 @@ import { useEffect, useState, useCallback } from "react"
 import { useAccount } from "wagmi"
 import { formatUnits } from "viem"
 import { cn } from "@/lib/utils"
+import Link from "next/link"
 import { PermissionDetailModal, type Permission } from "./permission-detail-modal"
 
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:3001"
+export const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:3001"
 
 // Token info for display
-const TOKENS: Record<string, { symbol: string; decimals: number; logo: string }> = {
+export const TOKENS: Record<string, { symbol: string; decimals: number; logo: string }> = {
   "0xfff9976782d46cc05630d1f6ebab18b2324d6b14": { symbol: "WETH", decimals: 18, logo: "⟠" },
   "0x1c7d4b196cb0c7b01d743fbc6116a902379c7238": { symbol: "USDC", decimals: 6, logo: "💵" },
   "0x1f9840a85d5af5bf1d1762f925bdaddc4201f984": { symbol: "UNI", decimals: 18, logo: "🦄" },
@@ -18,7 +19,7 @@ const TOKENS: Record<string, { symbol: string; decimals: number; logo: string }>
 }
 
 // Agent type display names
-const AGENT_TYPE_LABELS: Record<string, string> = {
+export const AGENT_TYPE_LABELS: Record<string, string> = {
   "dca": "DCA Agent",
   "limit-order": "Limit Order Agent",
   "savings": "Savings Agent",
@@ -26,13 +27,13 @@ const AGENT_TYPE_LABELS: Record<string, string> = {
 }
 
 // Helper to get token info
-function getTokenInfo(address: string) {
+export function getTokenInfo(address: string) {
   const normalized = address.toLowerCase()
   return TOKENS[normalized] || { symbol: "TOKEN", decimals: 18, logo: "●" }
 }
 
 // Helper to format relative time
-function formatRelativeTime(date: string | null): string {
+export function formatRelativeTime(date: string | null): string {
   if (!date) return "Never"
   const now = new Date()
   const then = new Date(date)
@@ -48,7 +49,7 @@ function formatRelativeTime(date: string | null): string {
 }
 
 // Helper to get description for a permission
-function getPermissionDescription(permission: Permission): string {
+export function getPermissionDescription(permission: Permission): string {
   const tokenInfo = getTokenInfo(permission.spendingToken)
 
   if (permission.agentType === "dca" && permission.config.dca) {
@@ -75,7 +76,7 @@ function getPermissionDescription(permission: Permission): string {
   return permission.name
 }
 
-function PermissionRow({
+export function PermissionRow({
   permission,
   index,
   onClick
@@ -134,12 +135,12 @@ function PermissionRow({
                 ? "text-green-400 border-green-400/30 bg-green-400/10"
                 : permission.status === "paused"
                 ? "text-yellow-400 border-yellow-400/30 bg-yellow-400/10"
-                : permission.status === "completed"
+                : permission.status === "expired"
                 ? "text-blue-400 border-blue-400/30 bg-blue-400/10"
                 : "text-muted-foreground border-border bg-muted/10"
             )}
           >
-            {permission.status === "completed" && isOneTimeOrder ? "filled" : permission.status}
+            {permission.status}
           </span>
         </div>
       </div>
@@ -386,25 +387,42 @@ export function PermissionsList() {
   }
 
   const displayedPermissions = filter === "active" ? activePermissions : completedPermissions
+  // Show only first 3 on the dashboard
+  const limitedPermissions = displayedPermissions.slice(0, 3)
+  const hasMore = displayedPermissions.length > 3
 
   return (
-    <>
-      {/* Tabs */}
-      <div className="flex items-center gap-2 mb-4">
-        <TabButton
-          active={filter === "active"}
-          onClick={() => setFilter("active")}
-          count={activePermissions.length}
+    <div className="border border-border/50 bg-background/50 p-6">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center gap-4">
+          <h3 className="font-mono text-xs uppercase tracking-widest text-muted-foreground">
+            Active Permissions
+          </h3>
+          {/* Tabs */}
+          <div className="flex items-center gap-2">
+            <TabButton
+              active={filter === "active"}
+              onClick={() => setFilter("active")}
+              count={activePermissions.length}
+            >
+              Active
+            </TabButton>
+            <TabButton
+              active={filter === "completed"}
+              onClick={() => setFilter("completed")}
+              count={completedPermissions.length}
+            >
+              History
+            </TabButton>
+          </div>
+        </div>
+        <Link
+          href="/dashboard/permissions"
+          className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground hover:text-accent transition-colors"
         >
-          Active
-        </TabButton>
-        <TabButton
-          active={filter === "completed"}
-          onClick={() => setFilter("completed")}
-          count={completedPermissions.length}
-        >
-          Completed
-        </TabButton>
+          View All →
+        </Link>
       </div>
 
       {/* Permissions List */}
@@ -412,7 +430,7 @@ export function PermissionsList() {
         <EmptyState filter={filter} />
       ) : (
         <div className="space-y-3">
-          {displayedPermissions.map((permission, index) => (
+          {limitedPermissions.map((permission, index) => (
             <PermissionRow
               key={permission.id}
               permission={permission}
@@ -423,12 +441,24 @@ export function PermissionsList() {
         </div>
       )}
 
+      {/* Show more indicator */}
+      {hasMore && (
+        <div className="mt-4 pt-4 border-t border-border/30 text-center">
+          <Link
+            href="/dashboard/permissions"
+            className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground hover:text-accent transition-colors"
+          >
+            +{displayedPermissions.length - 3} more permissions →
+          </Link>
+        </div>
+      )}
+
       <PermissionDetailModal
         isOpen={isModalOpen}
         onClose={handleModalClose}
         permission={selectedPermission}
         onCancelled={handlePermissionCancelled}
       />
-    </>
+    </div>
   )
 }
