@@ -348,14 +348,37 @@ export default function AgentStatsPage() {
         <DashboardHeader />
 
         <main className="px-6 md:px-28 py-12 max-w-6xl mx-auto">
-          {/* Title */}
-          <div className="mb-12">
+          {/* Navigation */}
+          <div className="mb-8">
             <Link
               href="/dashboard"
-              className="font-mono text-xs uppercase tracking-widest text-muted-foreground hover:text-foreground transition-colors mb-4 inline-block"
+              className="font-mono text-xs uppercase tracking-widest text-muted-foreground hover:text-foreground transition-colors mb-6 inline-block"
             >
               ← Back to Dashboard
             </Link>
+
+            {/* Agent Tabs */}
+            <div className="flex items-center gap-2 border-b border-border/50 pb-4 overflow-x-auto">
+              {Object.entries(AGENTS).map(([address, meta]) => (
+                <Link
+                  key={address}
+                  href={`/dashboard/agent/${address}`}
+                  className={cn(
+                    "flex items-center gap-2 px-4 py-2 font-mono text-xs uppercase tracking-widest transition-colors whitespace-nowrap",
+                    agentId.toLowerCase() === address.toLowerCase()
+                      ? "bg-accent text-background"
+                      : "border border-border/50 text-muted-foreground hover:border-accent/50 hover:text-foreground"
+                  )}
+                >
+                  <span>{meta.icon}</span>
+                  <span>{meta.name}</span>
+                </Link>
+              ))}
+            </div>
+          </div>
+
+          {/* Title */}
+          <div className="mb-12">
             <div className="flex items-center gap-4">
               <div className="w-12 h-12 border border-accent/50 bg-accent/10 flex items-center justify-center">
                 <span className="text-2xl">{agentMeta.icon}</span>

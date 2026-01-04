@@ -50,14 +50,21 @@ export default function DashboardPage() {
               </TabsList>
             <div className="flex justify-end gap-4">
             <a
-            href="/"
+            href="/dashboard/agent"
+            className="group inline-flex items-center gap-2 font-mono text-xs uppercase tracking-widest text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <ScrambleTextOnHover text="Agent Stats" as="span" duration={0.4} />
+            <BitmapChevron className="w-3 h-3 -rotate-90 group-hover:-translate-y-1 transition-transform" />
+          </a>
+            <a
+            href="/dashboard/permissions"
             className="group inline-flex items-center gap-2 font-mono text-xs uppercase tracking-widest text-muted-foreground hover:text-foreground transition-colors"
           >
             <ScrambleTextOnHover text="All Permissions" as="span" duration={0.4} />
             <BitmapChevron className="w-3 h-3 -rotate-90 group-hover:-translate-y-1 transition-transform" />
           </a>
             <a
-            href="/"
+            href="/dashboard/activity"
             className="group inline-flex items-center gap-2 font-mono text-xs uppercase tracking-widest text-muted-foreground hover:text-foreground transition-colors"
           >
             <ScrambleTextOnHover text="View Activity" as="span" duration={0.4} />
