@@ -69,7 +69,7 @@ export interface Permission {
   id: string
   name: string
   agentType: string
-  status: "active" | "paused" | "expired" | "cancelled"
+  status: "active" | "paused" | "expired" | "cancelled" | "completed"
   spendingToken: string
   monthlyLimit: string
   spent: string

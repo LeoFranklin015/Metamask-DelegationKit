@@ -52,7 +52,7 @@ function AgentCard({
   agent: (typeof agents)[0]
   onSelect: () => void
 }) {
-  const isDisabled = agent.status === "soon"
+  const isDisabled = false
 
   return (
     <button
