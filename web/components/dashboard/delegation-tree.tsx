@@ -42,11 +42,16 @@ const AGENT_ADDRESSES: Record<string, { name: string; type: string; icon: string
 
 // Token info
 const TOKENS: Record<string, { symbol: string; decimals: number }> = {
+  // Sepolia tokens
   "0xfff9976782d46cc05630d1f6ebab18b2324d6b14": { symbol: "WETH", decimals: 18 },
   "0x1c7d4b196cb0c7b01d743fbc6116a902379c7238": { symbol: "USDC", decimals: 6 },
   "0x1f9840a85d5af5bf1d1762f925bdaddc4201f984": { symbol: "UNI", decimals: 18 },
   "0xff34b3d4aee8ddcd6f9afffb6fe49bd371b8a357": { symbol: "DAI", decimals: 18 },
   "0xf8fb3713d459d7c1018bd0a49d19b4c44290ebe5": { symbol: "LINK", decimals: 18 },
+  // Base Sepolia tokens (Aave V3)
+  "0xba50cd2a20f6da35d788639e581bca8d0b5d4d5f": { symbol: "USDC", decimals: 6 },
+  "0x0a215d8ba66387dca84b284d18c3b4ec3de6e54a": { symbol: "USDT", decimals: 6 },
+  "0x4200000000000000000000000000000000000006": { symbol: "WETH", decimals: 18 },
 }
 
 interface Permission {

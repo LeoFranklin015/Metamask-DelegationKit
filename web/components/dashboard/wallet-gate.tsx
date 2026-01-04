@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react"
 import { useAccount, usePublicClient } from "wagmi"
-import { ConnectButton } from "@rainbow-me/rainbowkit"
+import { CustomConnectButton } from "@/components/ConnectButton"
 import { UpgradeAccountModal } from "./upgrade-account-modal"
 import { AnimatedNoise } from "@/components/animated-noise"
 
@@ -100,7 +100,7 @@ export function WalletGate({ children }: WalletGateProps) {
           </div>
 
           <div className="flex justify-center">
-            <ConnectButton />
+            <CustomConnectButton />
           </div>
 
           <div className="border border-border/30 p-4 max-w-sm mx-auto">

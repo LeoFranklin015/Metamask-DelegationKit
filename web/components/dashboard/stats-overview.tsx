@@ -9,14 +9,19 @@ const ENVIO_GRAPHQL_URL =
   process.env.NEXT_PUBLIC_ENVIO_GRAPHQL_URL ||
   "https://indexer.dev.hyperindex.xyz/dca02a0/v1/graphql"
 
+const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:3001"
+
 // Token info for display with USD prices (mock prices for demo)
 const TOKENS: Record<string, { symbol: string; decimals: number; usdPrice: number }> = {
+  // Sepolia tokens
   "0xfff9976782d46cc05630d1f6ebab18b2324d6b14": { symbol: "WETH", decimals: 18, usdPrice: 2500 },
   "0x1c7d4b196cb0c7b01d743fbc6116a902379c7238": { symbol: "USDC", decimals: 6, usdPrice: 1 },
   "0x1f9840a85d5af5bf1d1762f925bdaddc4201f984": { symbol: "UNI", decimals: 18, usdPrice: 8 },
   "0xff34b3d4aee8ddcd6f9afffb6fe49bd371b8a357": { symbol: "DAI", decimals: 18, usdPrice: 1 },
   "0xf8fb3713d459d7c1018bd0a49d19b4c44290ebe5": { symbol: "LINK", decimals: 18, usdPrice: 15 },
-  // Base Sepolia tokens
+  // Base Sepolia tokens (Aave V3)
+  "0xba50cd2a20f6da35d788639e581bca8d0b5d4d5f": { symbol: "USDC", decimals: 6, usdPrice: 1 },
+  "0x0a215d8ba66387dca84b284d18c3b4ec3de6e54a": { symbol: "USDT", decimals: 6, usdPrice: 1 },
   "0x4200000000000000000000000000000000000006": { symbol: "WETH", decimals: 18, usdPrice: 2500 },
 }
 
@@ -27,6 +32,9 @@ interface StatsData {
   executionsThisMonth: number
   totalVolumeUsd: number
   volumeThisMonthUsd: number
+  // Monthly budget from active permissions
+  monthlyBudgetUsd: number
+  monthlySpentUsd: number
 }
 
 interface StatCardProps {
@@ -93,6 +101,13 @@ function getTokenInfo(address: string | null) {
   return TOKENS[address.toLowerCase()] || { symbol: "TOKEN", decimals: 18, usdPrice: 0 }
 }
 
+interface BackendPermission {
+  spendingToken: string
+  monthlyLimit: string
+  spent: string
+  agentType: string
+}
+
 async function fetchAccountStats(address: string): Promise<StatsData> {
   // Get the start of current month
   const now = new Date()
@@ -130,19 +145,42 @@ async function fetchAccountStats(address: string): Promise<StatsData> {
   `
 
   try {
-    const response = await fetch(ENVIO_GRAPHQL_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        query,
-        variables: {
-          address: address.toLowerCase(),
-          monthStart: startOfMonthTimestamp
-        },
+    // Fetch both Envio data and backend permissions in parallel
+    const [envioResponse, permissionsResponse] = await Promise.all([
+      fetch(ENVIO_GRAPHQL_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          query,
+          variables: {
+            address: address.toLowerCase(),
+            monthStart: startOfMonthTimestamp
+          },
+        }),
       }),
-    })
+      fetch(`${BACKEND_URL}/api/agents/user/${address}?status=active`),
+    ])
 
-    const result = await response.json()
+    const result = await envioResponse.json()
+    const permissionsData = await permissionsResponse.json()
+
+    // Calculate monthly budget and spent from active permissions
+    let monthlyBudgetUsd = 0
+    let monthlySpentUsd = 0
+
+    if (permissionsData.success && permissionsData.permissions) {
+      permissionsData.permissions.forEach((p: BackendPermission) => {
+        // Skip limit orders as they are one-time
+        if (p.agentType === "limit-order") return
+
+        const tokenInfo = getTokenInfo(p.spendingToken)
+        const budget = Number(formatUnits(BigInt(p.monthlyLimit || "0"), tokenInfo.decimals))
+        const spent = Number(formatUnits(BigInt(p.spent || "0"), tokenInfo.decimals))
+
+        monthlyBudgetUsd += budget * tokenInfo.usdPrice
+        monthlySpentUsd += spent * tokenInfo.usdPrice
+      })
+    }
 
     if (result.errors) {
       console.error("Envio GraphQL errors:", result.errors)
@@ -153,6 +191,8 @@ async function fetchAccountStats(address: string): Promise<StatsData> {
         executionsThisMonth: 0,
         totalVolumeUsd: 0,
         volumeThisMonthUsd: 0,
+        monthlyBudgetUsd,
+        monthlySpentUsd,
       }
     }
 
@@ -189,6 +229,8 @@ async function fetchAccountStats(address: string): Promise<StatsData> {
       executionsThisMonth: monthRedemptions.length,
       totalVolumeUsd,
       volumeThisMonthUsd,
+      monthlyBudgetUsd,
+      monthlySpentUsd,
     }
   } catch (error) {
     console.error("Failed to fetch account stats:", error)
@@ -199,6 +241,8 @@ async function fetchAccountStats(address: string): Promise<StatsData> {
       executionsThisMonth: 0,
       totalVolumeUsd: 0,
       volumeThisMonthUsd: 0,
+      monthlyBudgetUsd: 0,
+      monthlySpentUsd: 0,
     }
   }
 }
@@ -251,16 +295,16 @@ export function StatsOverview() {
     return (
       <div className="flex flex-col md:flex-row gap-4">
         <StatCard label="Total Volume" value="--" subValue="connect wallet" />
-        <StatCard label="This Month" value="--" subValue="connect wallet" />
+        <StatCard label="Monthly Budget" value="--" subValue="connect wallet" />
         <StatCard label="Total Executions" value="--" subValue="connect wallet" />
       </div>
     )
   }
 
-  // Calculate month progress (assume a monthly budget based on total volume)
-  const monthProgress = stats && stats.totalVolumeUsd > 0
-    ? (stats.volumeThisMonthUsd / stats.totalVolumeUsd) * 100
-    : 0
+  // Calculate monthly budget progress
+  const monthProgress = stats && stats.monthlyBudgetUsd > 0
+    ? (stats.monthlySpentUsd / stats.monthlyBudgetUsd) * 100
+    : undefined
 
   return (
     <div className="flex flex-col md:flex-row gap-4">
@@ -271,10 +315,10 @@ export function StatsOverview() {
         isLoading={isLoading}
       />
       <StatCard
-        label="This Month"
-        value={stats ? formatUsd(stats.volumeThisMonthUsd) : "--"}
-        subValue={stats ? `${stats.executionsThisMonth} execution${stats.executionsThisMonth !== 1 ? "s" : ""}` : undefined}
-        progress={stats ? monthProgress : undefined}
+        label="Monthly Budget"
+        value={stats ? formatUsd(stats.monthlySpentUsd) : "--"}
+        subValue={stats && stats.monthlyBudgetUsd > 0 ? `of ${formatUsd(stats.monthlyBudgetUsd)}` : "no active budgets"}
+        progress={monthProgress}
         isLoading={isLoading}
       />
       <StatCard

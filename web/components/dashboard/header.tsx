@@ -3,7 +3,7 @@
 import Link from "next/link"
 import { ScrambleTextOnHover } from "@/components/scramble-text"
 import { BitmapChevron } from "@/components/bitmap-chevron"
-import { ConnectButton } from "@rainbow-me/rainbowkit"
+import { CustomConnectButton } from "@/components/ConnectButton"
 
 export function DashboardHeader() {
   return (
@@ -17,7 +17,7 @@ export function DashboardHeader() {
         </Link>
 
         <nav className="flex items-center gap-8">
-          <ConnectButton />
+          <CustomConnectButton />
           <a
             href="/"
             className="group inline-flex items-center gap-2 font-mono text-xs uppercase tracking-widest text-muted-foreground hover:text-foreground transition-colors"

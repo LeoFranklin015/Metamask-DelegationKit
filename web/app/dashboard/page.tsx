@@ -14,6 +14,8 @@ import { RecentActivity } from "@/components/dashboard/recent-activity"
 import { WalletGate } from "@/components/dashboard/wallet-gate"
 import { AnimatedNoise } from "@/components/animated-noise"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { BitmapChevron } from "@/components/bitmap-chevron"
+import { ScrambleTextOnHover } from "@/components/scramble-text"
 
 export default function DashboardPage() {
   const [isNewPermissionOpen, setIsNewPermissionOpen] = useState(false)
@@ -46,13 +48,29 @@ export default function DashboardPage() {
                   Delegation Map
                 </TabsTrigger>
               </TabsList>
-
+            <div className="flex justify-end gap-4">
+            <a
+            href="/"
+            className="group inline-flex items-center gap-2 font-mono text-xs uppercase tracking-widest text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <ScrambleTextOnHover text="All Permissions" as="span" duration={0.4} />
+            <BitmapChevron className="w-3 h-3 -rotate-90 group-hover:-translate-y-1 transition-transform" />
+          </a>
+            <a
+            href="/"
+            className="group inline-flex items-center gap-2 font-mono text-xs uppercase tracking-widest text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <ScrambleTextOnHover text="View Activity" as="span" duration={0.4} />
+            <BitmapChevron className="w-3 h-3 -rotate-90 group-hover:-translate-y-1 transition-transform" />
+          </a>
+           
               <button
                 onClick={() => setIsNewPermissionOpen(true)}
                 className="bg-accent text-background px-4 py-2 font-mono text-xs uppercase tracking-widest hover:bg-accent/90 transition-colors"
               >
                 New Permission +
               </button>
+            </div>
             </div>
 
             <TabsContent value="overview" className="mt-12 space-y-10">
